@@ -132,12 +132,19 @@ jobs:
             const repo = context.repo.repo;
             const tag = 'pre-release';
 
+            // 统一提取错误详情，便于定位 403 / 422 这类被静默吞掉的失败
+            const detail = (error) =>
+              `${error?.status ?? 'unknown'} ${error?.response?.data?.message ?? error?.message ?? ''}`.trim();
+
             try {
               const release = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
               await github.rest.repos.deleteRelease({ owner, repo, release_id: release.data.id });
-              core.info(`Deleted existing prerelease ${tag}`);
+              core.info(`Deleted existing prerelease ${tag} (id=${release.data.id})`);
             } catch (error) {
-              if (error.status !== 404) throw error;
+              if (error.status !== 404) {
+                core.setFailed(`Failed to remove existing prerelease ${tag}: ${detail(error)}`);
+                return;
+              }
               core.info(`No existing prerelease ${tag}`);
             }
 
@@ -145,8 +152,13 @@ jobs:
               await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
               core.info(`Deleted tag refs/tags/${tag}`);
             } catch (error) {
-              if (error.status !== 404) throw error;
-              core.info(`Tag refs/tags/${tag} already absent`);
+              // 404：引用不存在；422：GitHub 对缺失引用的删除请求同样返回 "Reference does not exist"
+              // 两种都说明 tag 已不在，属于正常的幂等场景，不应中断发布
+              if (error.status === 404 || error.status === 422) {
+                core.info(`Tag refs/tags/${tag} already absent (${detail(error)})`);
+                return;
+              }
+              core.setFailed(`Failed to delete tag refs/tags/${tag}: ${detail(error)}`);
             }
 
       - name: Publish GitHub pre-release
