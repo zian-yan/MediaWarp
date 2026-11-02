@@ -69,15 +69,15 @@ func TestIsSafeRedirectURL(t *testing.T) {
 		in   string
 		want bool
 	}{
-		"http":            {"http://example.com/a", true},
-		"https":           {"https://example.com/a?b=1", true},
-		"局域网地址允许":         {"http://192.168.1.10:5244/d/a.mkv", true},
-		"javascript 伪协议":  {"javascript:alert(1)", false},
-		"file 协议":         {"file:///etc/passwd", false},
-		"data 协议":         {"data:text/html,<script>", false},
-		"缺少协议":            {"example.com/a", false},
-		"协议相对地址":          {"//example.com/a", false},
-		"空字符串":            {"", false},
+		"http":           {"http://example.com/a", true},
+		"https":          {"https://example.com/a?b=1", true},
+		"局域网地址允许":        {"http://192.168.1.10:5244/d/a.mkv", true},
+		"javascript 伪协议": {"javascript:alert(1)", false},
+		"file 协议":        {"file:///etc/passwd", false},
+		"data 协议":        {"data:text/html,<script>", false},
+		"缺少协议":           {"example.com/a", false},
+		"协议相对地址":         {"//example.com/a", false},
+		"空字符串":           {"", false},
 	}
 
 	for name, c := range cases {

@@ -150,14 +150,14 @@ func credentialFingerprint(ctx *gin.Context) string {
 	query := ctx.Request.URL.Query()
 	for _, key := range []string{"api_key", "ApiKey"} {
 		if v := query.Get(key); v != "" {
-			return utils.MD5Hash(key+"="+v)[:16]
+			return utils.MD5Hash(key + "=" + v)[:16]
 		}
 	}
 	if v := ctx.GetHeader("X-Emby-Token"); v != "" {
-		return utils.MD5Hash("x-emby-token="+v)[:16]
+		return utils.MD5Hash("x-emby-token=" + v)[:16]
 	}
 	if v := ctx.GetHeader("Authorization"); v != "" {
-		return utils.MD5Hash("authorization="+v)[:16]
+		return utils.MD5Hash("authorization=" + v)[:16]
 	}
 	return "anonymous"
 }
