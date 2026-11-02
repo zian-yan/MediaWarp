@@ -4,22 +4,29 @@ on:
   workflow_call:
     inputs:
       push:
-        description: "Whether to push the Docker image"
+        description: "Whether to push the built images to the registries"
         required: true
         type: boolean
       tags:
         description: "docker/metadata-action tag rules"
         required: true
         type: string
+      platforms:
+        description: "Comma separated target platforms"
+        required: false
+        type: string
+        default: "linux/amd64,linux/arm64"
     secrets:
+      # 均为可选：未配置时只发布到 ghcr.io，不会因此让整个流程失败
       DOCKERHUB_USERNAME:
-        required: true
+        required: false
       DOCKERHUB_TOKEN:
-        required: true
+        required: false
 
 permissions:
   contents: read
-  packages: write
+  actions: read # actions/download-artifact 需要读取本次运行的 artifact
+  packages: write # 推送 ghcr.io 需要
 
 jobs:
   build-docker:
@@ -30,6 +37,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Download Linux binary artifacts
         uses: actions/download-artifact@v8
@@ -37,23 +45,71 @@ jobs:
           pattern: MediaWarp_linux_*
           path: dist/input
 
-      - name: Prepare Docker build binaries
+      - name: Resolve target registries
+        id: registry
         shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           set -euo pipefail
 
-          mkdir -p targets/linux/amd64 targets/linux/arm64 targets/linux/arm/v7 targets/linux/riscv64
+          # 仓库名可能含大写，而镜像名必须全小写
+          ghcr_image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          images="${ghcr_image}"
 
-          cp dist/input/MediaWarp_linux_amd64/MediaWarp targets/linux/amd64/MediaWarp
-          cp dist/input/MediaWarp_linux_arm64/MediaWarp targets/linux/arm64/MediaWarp
-          cp dist/input/MediaWarp_linux_armv7/MediaWarp targets/linux/arm/v7/MediaWarp
-          cp dist/input/MediaWarp_linux_riscv64/MediaWarp targets/linux/riscv64/MediaWarp
+          if [[ -n "${DOCKERHUB_USERNAME}" && -n "${DOCKERHUB_TOKEN}" ]]; then
+            dockerhub_image="docker.io/${DOCKERHUB_USERNAME,,}/mediawarp"
+            images="${dockerhub_image}"$'\n'"${ghcr_image}"
+            echo "has_dockerhub=true" >> "${GITHUB_OUTPUT}"
+            echo "将发布到：${dockerhub_image} 与 ${ghcr_image}"
+          else
+            echo "has_dockerhub=false" >> "${GITHUB_OUTPUT}"
+            echo "::notice::未配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN，本次只发布到 ${ghcr_image}"
+          fi
+
+          {
+            echo "images<<EOF"
+            printf '%s\n' "${images}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Prepare Docker build binaries
+        shell: bash
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+
+          # build-push-action 的 platforms 必须与 TARGETPLATFORM 目录一一对应，
+          # 目录结构需与 docker/Dockerfile.ci 中的 targets/$TARGETPLATFORM 一致
+          for platform in ${PLATFORMS//,/ }; do
+            case "${platform}" in
+              linux/amd64) target=linux_amd64 ;;
+              linux/arm64) target=linux_arm64 ;;
+              *)
+                echo "不支持的平台：${platform}，请先在 build-binary.yaml 的构建矩阵中补充" >&2
+                exit 1
+                ;;
+            esac
+
+            src="dist/input/MediaWarp_${target}/MediaWarp"
+            dst="targets/${platform}/MediaWarp"
+            if [[ ! -f "${src}" ]]; then
+              echo "缺少二进制产物 ${src}，请确认 build-binary 作业已上传该平台" >&2
+              exit 1
+            fi
+
+            mkdir -p "$(dirname "${dst}")"
+            cp "${src}" "${dst}"
+            echo "${platform} <- ${src}"
+          done
 
       - name: Docker Meta
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/mediawarp
+          images: ${{ steps.registry.outputs.images }}
           tags: ${{ inputs.tags }}
           labels: |
             org.opencontainers.image.title=MediaWarp
@@ -62,33 +118,43 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       - name: Login to DockerHub
-        if: ${{ inputs.push }}
+        if: ${{ inputs.push && steps.registry.outputs.has_dockerhub == 'true' }}
         uses: docker/login-action@v4
         with:
+          registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Login to GitHub Container Registry
+        if: ${{ inputs.push }}
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Build Image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile.ci
-          platforms: |
-            linux/amd64
-            linux/arm64
-            linux/arm/v7
-            linux/riscv64
+          platforms: ${{ inputs.platforms }}
           push: ${{ inputs.push }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Docker Hub Description
-        if: ${{ inputs.push }}
+        if: ${{ inputs.push && steps.registry.outputs.has_dockerhub == 'true' }}
         continue-on-error: true
         uses: peter-evans/dockerhub-description@v5
         with:
@@ -96,3 +162,24 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ secrets.DOCKERHUB_USERNAME }}/mediawarp
           short-description: ${{ github.event.repository.description }}
+
+      - name: Write summary
+        shell: bash
+        env:
+          PUSHED: ${{ inputs.push }}
+          PLATFORMS: ${{ inputs.platforms }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Docker 镜像构建结果"
+            echo ""
+            echo "- 平台：\`${PLATFORMS}\`"
+            echo "- 推送：${PUSHED}"
+            echo "- 多架构清单摘要：\`${DIGEST:-（未推送）}\`"
+            echo ""
+            echo "\`\`\`"
+            printf '%s\n' "${TAGS:-（无标签）}"
+            echo "\`\`\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

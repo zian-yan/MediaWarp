@@ -33,7 +33,7 @@ func (h *LoggerFileHook) Fire(entry *logrus.Entry) error {
 		if h.file != nil {
 			h.file.Close()
 		}
-		err := os.MkdirAll(config.LogDirWithDate(), os.ModePerm)
+		err := os.MkdirAll(config.LogDirWithDate(), 0o750) // 仅属主与同组可访问
 		if err != nil {
 			return err
 		}
@@ -43,7 +43,8 @@ func (h *LoggerFileHook) Fire(entry *logrus.Entry) error {
 		} else {
 			filename = config.AccessLogPath()
 		}
-		h.file, err = os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		// 日志可能包含 url 等敏感信息，权限收紧到 0640
+		h.file, err = os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
 		if err != nil {
 			return err
 		}

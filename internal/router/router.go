@@ -1,14 +1,14 @@
 package router
 
 import (
-	"net/http"
+	"regexp"
+	"time"
 
 	"github.com/AkimioJR/MediaWarp/constants"
 	"github.com/AkimioJR/MediaWarp/internal/config"
 	"github.com/AkimioJR/MediaWarp/internal/handler"
 	"github.com/AkimioJR/MediaWarp/internal/logging"
 	"github.com/AkimioJR/MediaWarp/internal/middleware"
-	"github.com/AkimioJR/MediaWarp/static"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,82 +16,67 @@ import (
 func InitRouter() *gin.Engine {
 	ginR := gin.New()
 	ginR.Use(
-		middleware.Logger(),
-		middleware.Recovery(),
-		middleware.SetRefererPolicy(constants.SameOrigin),
+		middleware.Logger(),                               // 访问日志
+		middleware.Recovery(),                             // panic 恢复
+		middleware.SetRefererPolicy(constants.SameOrigin), // Referer 策略
+		middleware.ClientFilter(),                         // 客户端过滤
 	)
 
-	if config.ClientFilter.Enable {
-		ginR.Use(middleware.ClientFilter())
-		logging.Info("客户端过滤中间件已启用")
-	} else {
-		logging.Info("客户端过滤中间件未启用")
-	}
-
-	mediawarpRouter := ginR.Group("/MediaWarp")
-	{
-		mediawarpRouter.Any("/version", func(ctx *gin.Context) {
-			ctx.JSON(http.StatusOK, config.Version())
+	// 上游处理器在启动时构建完成，这里直接取用，运行期不再变更
+	mediaServer := handler.GetMediaServer()
+	if mediaServer == nil {
+		logging.Error("上游媒体服务器处理器未初始化，所有请求将返回 500")
+		ginR.NoRoute(func(ctx *gin.Context) {
+			ctx.AbortWithStatus(500)
 		})
-		if config.Web.Enable { // 启用 Web 页面修改相关设置
-			mediawarpRouter.StaticFS("/static", http.FS(static.EmbeddedStaticAssets))
-			if config.Web.Custom { // 用户自定义静态资源目录
-				mediawarpRouter.Static("/custom", config.CostomDir())
-			}
-			if config.Web.Robots != "" { // 自定义 robots.txt
-				ginR.GET(
-					"/robots.txt",
-					func(ctx *gin.Context) {
-						ctx.String(http.StatusOK, config.Web.Robots)
-					},
-				)
-			}
-		}
+		return ginR
 	}
 
-	handlers := make(gin.HandlersChain, 0, 3)
-	if config.Cache.Enable {
-		mediaServerHandler := handler.GetMediaServer()
-		{
-			if config.Cache.ImageTTL > 0 {
-				if mediaServerHandler.GetImageCacheRegexp() != nil {
-					logging.Infof("图片缓存中间件已启用, TTL: %s", config.Cache.ImageTTL.String())
-					handlers = append(handlers, middleware.ImageCache(config.Cache.ImageTTL, mediaServerHandler.GetImageCacheRegexp()))
-				} else {
-					logging.Warningf("媒体服务器 %s 不支持图片缓存, 未添加图片缓存中间件", config.MediaServer.Type.String())
-				}
-			} else {
-				logging.Infof("图片缓存中间件未启用, TTL: %s", config.Cache.ImageTTL.String())
-			}
-		}
+	imageReg, imageTTL := cacheSpec(mediaServer.GetImageCacheRegexp(), config.Cache.ImageTTL)
+	subtitleReg, subtitleTTL := cacheSpec(mediaServer.GetSubtitleCacheRegexp(), config.Cache.SubtitleTTL)
 
-		{
-			if config.Cache.SubtitleTTL > 0 {
-				if mediaServerHandler.GetSubtitleCacheRegexp() != nil {
-					logging.Infof("字幕缓存中间件已启用, TTL: %s", config.Cache.SubtitleTTL.String())
-					handlers = append(handlers, middleware.SubtitleCache(config.Cache.SubtitleTTL, mediaServerHandler.GetSubtitleCacheRegexp()))
-				} else {
-					logging.Warningf("媒体服务器 %s 不支持字幕缓存, 未添加字幕缓存中间件", config.MediaServer.Type.String())
-				}
-			} else {
-				logging.Infof("字幕缓存中间件未启用, TTL: %s", config.Cache.SubtitleTTL.String())
-			}
-		}
-	} else {
-		logging.Info("全局缓存未启用, 未添加缓存中间件")
-	}
+	ginR.NoRoute(
+		middleware.NewCache("图片", imageReg, imageTTL),
+		middleware.NewCache("字幕", subtitleReg, subtitleTTL),
+		getRegexpRouterHandler(mediaServer),
+	)
 
-	handlers = append(handlers, getRegexpRouterHandler())
-	ginR.NoRoute(handlers...)
+	logCacheState()
 	return ginR
+}
+
+// 计算缓存匹配规则与有效期
+//
+// 缓存总开关关闭或 TTL ≤ 0 时不启用该项缓存
+func cacheSpec(reg *regexp.Regexp, ttl time.Duration) (*regexp.Regexp, time.Duration) {
+	if !config.Cache.Enable || ttl <= 0 {
+		return nil, 0
+	}
+	return reg, ttl
+}
+
+func logCacheState() {
+	if !config.Cache.Enable {
+		logging.Info("全局缓存未启用")
+		return
+	}
+	logCacheItem("图片", config.Cache.ImageTTL)
+	logCacheItem("字幕", config.Cache.SubtitleTTL)
+}
+
+func logCacheItem(name string, ttl time.Duration) {
+	if ttl > 0 {
+		logging.Infof("%s缓存中间件已启用, TTL: %s", name, ttl)
+	} else {
+		logging.Infof("%s缓存中间件未启用, TTL: %s", name, ttl)
+	}
 }
 
 // 正则表达式路由处理器
 //
 // 从媒体服务器处理结构体中获取正则路由规则
 // 依次匹配请求, 找到对应的处理器
-func getRegexpRouterHandler() gin.HandlerFunc {
-	mediaServerHandler := handler.GetMediaServer()
+func getRegexpRouterHandler(mediaServerHandler handler.MediaServerHandler) gin.HandlerFunc {
 	middlewareChain := NewMiddlewareChain().
 		Add(QueryKeyCaseInsensitive).
 		Add(DisableCompression)

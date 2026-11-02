@@ -13,3 +13,4 @@ MediaWarp*
 # 其他
 test/*
 .DS_Store
+.workbuddy/

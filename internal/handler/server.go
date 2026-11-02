@@ -17,27 +17,33 @@ type MediaServerHandler interface {
 	GetSubtitleCacheRegexp() *regexp.Regexp          // 字幕缓存正则表达式
 }
 
+// 上游媒体服务器处理器，进程启动时构建一次，运行期不再变更
 var mediaServerHandler MediaServerHandler
+
 var ErrInvalidMediaServerType = errors.New("错误的媒体服务器类型")
 
 // 初始化媒体服务器处理器
 func Init() error {
-	var err error
-	switch config.MediaServer.Type {
-	case constants.EMBY:
-		mediaServerHandler, err = NewEmbyServerHandler(config.MediaServer.ADDR, config.MediaServer.AUTH)
-	case constants.JELLYFIN:
-		mediaServerHandler, err = NewJellyfinHandler(config.MediaServer.ADDR, config.MediaServer.AUTH)
-	case constants.FNTV:
-		mediaServerHandler, err = NewFNTVHandler(config.MediaServer.ADDR)
-
-	default:
-		err = ErrInvalidMediaServerType
+	handler, err := build(config.MediaServer)
+	if err != nil {
+		return err
 	}
-	return err
+	mediaServerHandler = handler
+	return nil
 }
 
-// 获取媒体服务器接口
+// 获取媒体服务器处理器
 func GetMediaServer() MediaServerHandler {
 	return mediaServerHandler
+}
+
+func build(setting config.MediaServerSetting) (MediaServerHandler, error) {
+	switch setting.Type {
+	case constants.EMBY:
+		return NewEmbyServerHandler(setting.ADDR, setting.AUTH)
+	case constants.JELLYFIN:
+		return NewJellyfinHandler(setting.ADDR, setting.AUTH)
+	default:
+		return nil, ErrInvalidMediaServerType
+	}
 }

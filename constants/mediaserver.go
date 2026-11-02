@@ -14,8 +14,6 @@ var InvalidMediaServerErr = errors.New("invalid  MediaServerType")
 const (
 	EMBY     MediaServerType = iota // 媒体服务器类型：EmbyServer
 	JELLYFIN                        // 媒体服务器类型：Jellyfin
-	PLEX                            // 媒体服务器类型：Plex
-	FNTV                            // 媒体服务器类型：飞牛影视
 )
 
 func (m MediaServerType) str() (string, error) {
@@ -24,10 +22,6 @@ func (m MediaServerType) str() (string, error) {
 		return "Emby", nil
 	case JELLYFIN:
 		return "Jellyfin", nil
-	case PLEX:
-		return "Plex", nil
-	case FNTV:
-		return "FNTV", nil
 	default:
 		return "", InvalidMediaServerErr
 	}
@@ -47,10 +41,6 @@ func parseMediaServerTypeStr(s string) (MediaServerType, error) {
 		return EMBY, nil
 	case "Jellyfin":
 		return JELLYFIN, nil
-	case "Plex":
-		return PLEX, nil
-	case "FNTV":
-		return FNTV, nil
 	default:
 		return 0, InvalidMediaServerErr
 	}

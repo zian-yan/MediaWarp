@@ -1,10 +1,15 @@
-FROM alpine:latest
+# syntax=docker/dockerfile:1
+
+FROM alpine:3.21
+
+# ca-certificates：解析 HTTPS 直链（final_url）时校验系统根证书
+# tzdata：容器内时区与日志时间（配合 TZ / /etc/localtime）
+RUN apk add --no-cache ca-certificates tzdata
 
 ARG TARGETPLATFORM
-COPY targets/$TARGETPLATFORM/MediaWarp /MediaWarp
-
-RUN chmod +x /MediaWarp
+# 二进制由 build-binary 交叉编译产出，这里只做拷入，无需在目标架构下编译
+COPY --chmod=755 targets/${TARGETPLATFORM}/MediaWarp /MediaWarp
 
 EXPOSE 9000
-VOLUME ["/etc/localtime", "/etc/timezone", "/config", "/logs", "/custom"]
+VOLUME ["/etc/localtime", "/etc/timezone", "/config", "/logs"]
 ENTRYPOINT ["/MediaWarp"]

@@ -3,6 +3,7 @@ package logging
 import (
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/AkimioJR/MediaWarp/internal/config"
 
@@ -20,21 +21,26 @@ func init() {
 	serviceLogger.SetFormatter(&LoggerServiceFormatter{})
 }
 
+// 初始化日志输出
+//
+// 只在启动时调用一次，输出目标（终端 / 文件）由配置决定
 func Init() {
 	serviceLogger.SetReportCaller(false) // 关闭报告调用方
 
-	if !config.Logger.AccessLogger.Console { // 访问日志不输出到终端
-		accessLogger.Out = io.Discard
+	if config.Logger.AccessLogger.Console {
+		accessLogger.SetOutput(os.Stdout)
+	} else {
+		accessLogger.SetOutput(io.Discard)
 	}
-
-	if !config.Logger.ServiceLogger.Console { // 服务日志不输出到终端
-		serviceLogger.Out = io.Discard
+	if config.Logger.ServiceLogger.Console {
+		serviceLogger.SetOutput(os.Stdout)
+	} else {
+		serviceLogger.SetOutput(io.Discard)
 	}
 
 	if config.Logger.AccessLogger.File {
 		accessLogger.AddHook(NewLoggerFileHook(false))
 	}
-
 	if config.Logger.ServiceLogger.File {
 		serviceLogger.AddHook(NewLoggerFileHook(true))
 	}

@@ -212,7 +212,7 @@ type MediaSourceInfo struct {
 	AnalyzeDurationMS          *int64                    `json:"AnalyzeDurationMs,omitempty"`
 	Bitrate                    *int64                    `json:"Bitrate,omitempty"`
 	BufferMS                   *int64                    `json:"BufferMs,omitempty"`
-	Container                  *string                   `json:"Container,omitempty"` // AlistStrm 显示 strm，普通视频和 HTTPStrm
+	Container                  *string                   `json:"Container,omitempty"` // HTTPStrm 显示 strm，普通视频显示实际容器
 	ContainerStartTimeTicks    *int64                    `json:"ContainerStartTimeTicks,omitempty"`
 	DefaultAudioStreamIndex    *int64                    `json:"DefaultAudioStreamIndex,omitempty"`
 	DefaultSubtitleStreamIndex *int64                    `json:"DefaultSubtitleStreamIndex,omitempty"`
@@ -507,7 +507,7 @@ const (
 type MediaSourceType string
 
 const (
-	Default     MediaSourceType = "Default"  // 普通视频和 AlistStrm 显示 Default
+	Default     MediaSourceType = "Default"  // 普通视频显示 Default
 	Grouping    MediaSourceType = "Grouping" // HTTPStrm 显示 Grouping
 	Placeholder MediaSourceType = "Placeholder"
 )

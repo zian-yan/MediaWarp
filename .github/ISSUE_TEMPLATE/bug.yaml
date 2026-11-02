@@ -84,7 +84,7 @@ body:
       description: 你在以下哪个部分碰到了问题
       options:
         - Strm 文件播放问题
-        - Web 美化/额外功能问题
+        - 客户端过滤/缓存问题
         - 配置文件读取问题
         - 其他问题
     validations:

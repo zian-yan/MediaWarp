@@ -12,17 +12,28 @@ import (
 )
 
 // 客户端过滤器
+//
+// 名单在启动时读取一次，修改配置后需重启进程生效
 func ClientFilter() gin.HandlerFunc {
+	enabled := config.ClientFilter.Enable
+	mode := config.ClientFilter.Mode
+	clientList := config.ClientFilter.ClientList
+
 	return func(ctx *gin.Context) {
+		if !enabled {
+			ctx.Next()
+			return
+		}
+
 		userAgent := ctx.Request.UserAgent()
 		var allowed bool
 		if userAgent == "" { // 开启了客户端过滤器后禁止所有未提供User-Agent的链接
 			allowed = false
 		} else {
-			switch config.ClientFilter.Mode {
+			switch mode {
 			case constants.WHITELIST: // 白名单模式
 				allowed = false
-				for _, ua := range config.ClientFilter.ClientList {
+				for _, ua := range clientList {
 					if strings.Contains(userAgent, ua) {
 						allowed = true
 						break
@@ -30,7 +41,7 @@ func ClientFilter() gin.HandlerFunc {
 				}
 			case constants.BLACKLIST: // 黑名单模式
 				allowed = true
-				for _, ua := range config.ClientFilter.ClientList {
+				for _, ua := range clientList {
 					if strings.Contains(userAgent, ua) {
 						allowed = false
 						break

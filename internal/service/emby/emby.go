@@ -68,21 +68,6 @@ func (client *Client) ItemsServiceQueryItem(ids string, limit int, fields string
 	return itemResponse, nil
 }
 
-// 获取index.html内容 API：/web/index.html
-func (client *Client) GetIndexHtml() ([]byte, error) {
-	resp, err := utils.GetHTTPClient().Get(client.baseURL.JoinPath("web/index.html").String())
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-	htmlContent, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return htmlContent, nil
-}
-
 // 获取Emby实例
 func New(baseURL string, apiKey string) (*Client, error) {
 	parsedURL, err := url.Parse(baseURL)

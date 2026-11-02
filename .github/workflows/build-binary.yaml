@@ -45,15 +45,6 @@ jobs:
             goos: linux
             goarch: arm64
             bin: MediaWarp
-          - target: linux_armv7
-            goos: linux
-            goarch: arm
-            goarm: "7"
-            bin: MediaWarp
-          - target: linux_riscv64
-            goos: linux
-            goarch: riscv64
-            bin: MediaWarp
           - target: darwin_amd64
             goos: darwin
             goarch: amd64
@@ -89,7 +80,6 @@ jobs:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.platform.goos }}
           GOARCH: ${{ matrix.platform.goarch }}
-          GOARM: ${{ matrix.platform.goarm }}
           APP_VERSION: ${{ inputs.version }}
           COMMIT_HASH: ${{ inputs.commit_hash || github.sha }}
           BUILD_DATE: ${{ inputs.build_date }}

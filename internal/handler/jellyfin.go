@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/AkimioJR/MediaWarp/constants"
-	"github.com/AkimioJR/MediaWarp/internal/config"
 	"github.com/AkimioJR/MediaWarp/internal/logging"
 	"github.com/AkimioJR/MediaWarp/internal/service/jellyfin"
 	"github.com/AkimioJR/MediaWarp/utils"
@@ -28,7 +27,6 @@ type JellyfinHandler struct {
 	routerRules     []RegexpRouteRule      // 正则路由规则
 	proxy           *httputil.ReverseProxy // 反向代理
 	httpStrmHandler StrmHandlerFunc
-	// playbackInfoMutex sync.Map // 视频流处理并发控制，确保同一个 item ID 的重定向请求串行化，避免重复获取缓存
 }
 
 func NewJellyfinHandler(addr string, apiKey string) (*JellyfinHandler, error) {
@@ -57,20 +55,6 @@ func NewJellyfinHandler(addr string, apiKey string) (*JellyfinHandler, error) {
 				Regexp:  constants.JellyfinRegexp.Router.VideosHandler,
 				Handler: handler.VideosHandler,
 			},
-		}
-		if config.Web.Enable {
-			if config.Web.Index || config.Web.Head != "" || config.Web.ExternalPlayerUrl || config.Web.VideoTogether {
-				handler.routerRules = append(
-					handler.routerRules,
-					RegexpRouteRule{
-						Regexp: constants.JellyfinRegexp.Router.ModifyIndex,
-						Handler: responseModifyCreater(
-							handler.proxy.Rewrite,
-							generateWebModifier(constants.JELLYFIN),
-						),
-					},
-				)
-			}
 		}
 	}
 
@@ -102,7 +86,7 @@ func (*JellyfinHandler) GetSubtitleCacheRegexp() *regexp.Regexp {
 // 修改播放信息请求
 //
 // /Items/:itemId
-// 强制将 HTTPStrm 设置为支持直链播放和转码、AlistStrm 设置为支持直链播放并且禁止转码
+// 强制将 HTTPStrm 设置为支持直链播放，未开启 proxy 时禁用转码
 func (handler *JellyfinHandler) ModifyPlaybackInfo(rw *http.Response) error {
 	startTime := time.Now()
 	defer func() {
@@ -145,30 +129,18 @@ func (handler *JellyfinHandler) ModifyPlaybackInfo(rw *http.Response) error {
 			logging.Warningf("Item 的 Path 为空，MediaSource ID: %s", *mediasource.ID)
 			continue
 		}
-		strmFileType, opt := recgonizeStrmFileType(*item.Path)
-		bsePath := "MediaSources." + strconv.Itoa(index) + "."
-		switch strmFileType {
-		case constants.HTTPStrm: // HTTPStrm 设置支持直链播放并且支持转码
-			processHTTPStrmPlaybackInfo(
-				jsonChain,
-				bsePath,
-				*mediasource.ID,
-				*mediasource.ID,
-				mediasource.DirectStreamURL,
-			)
-
-		case constants.AlistStrm: // AlistStm 设置支持直链播放并且禁止转码
-			processAlistStrmPlaybackInfo(
-				jsonChain,
-				bsePath,
-				*mediasource.ID,
-				*mediasource.ID,
-				opt.(string),
-				mediasource.DirectStreamURL,
-				*item.Path,
-				mediasource.Size,
-			)
+		if !matchHTTPStrmPath(*item.Path) {
+			continue
 		}
+
+		bsePath := "MediaSources." + strconv.Itoa(index) + "."
+		processHTTPStrmPlaybackInfo(
+			jsonChain,
+			bsePath,
+			*mediasource.ID,
+			*mediasource.ID,
+			mediasource.DirectStreamURL,
+		)
 
 		logging.Debugf("处理 %s 的 MediaSource %s 耗时：%s", *item.Path, *mediasource.ID, time.Since(startTime))
 	}
@@ -187,7 +159,7 @@ func (handler *JellyfinHandler) ModifyPlaybackInfo(rw *http.Response) error {
 
 // 视频流处理器
 //
-// 支持播放本地视频、重定向 HttpStrm、AlistStrm
+// 支持播放本地视频、重定向 HTTPStrm
 func (handler *JellyfinHandler) VideosHandler(ctx *gin.Context) {
 	if ctx.Request.Method == http.MethodHead { // 不额外处理 HEAD 请求
 		handler.ReverseProxy(ctx.Writer, ctx.Request)
@@ -218,40 +190,38 @@ func (handler *JellyfinHandler) VideosHandler(ctx *gin.Context) {
 		return
 	}
 
-	strmFileType, opt := recgonizeStrmFileType(*item.Path)
+	if !matchHTTPStrmPath(*item.Path) { // 不是 HTTPStrm
+		handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
+		return
+	}
+
 	for _, mediasource := range item.MediaSources {
 		if mediasource.ID == nil {
 			continue
 		}
-		if *mediasource.ID == mediaSourceID { // EmbyServer >= 4.9 返回的ID带有前缀mediasource_
-			if mediasource.Path == nil {
-				logging.Warningf("MediaSource (ID: %s) 的 Path 为空", *mediasource.ID)
-				handler.ReverseProxy(ctx.Writer, ctx.Request)
-				return
-			}
-			switch strmFileType {
-			case constants.HTTPStrm:
-				if mediasource.Protocol != nil && *mediasource.Protocol == jellyfin.HTTP {
-					ctx.Redirect(http.StatusFound, handler.httpStrmHandler(*mediasource.Path, ctx.Request.UserAgent()))
-					return
-				}
-
-			case constants.AlistStrm: // 无需判断 *mediasource.Container 是否以Strm结尾，当 AlistStrm 存储的位置有对应的文件时，*mediasource.Container 会被设置为文件后缀
-				res, err := alistStrmHandler(*mediasource.Path, opt.(string), false)
-				if err != nil {
-					logging.Warningf("获取 AlistStrm 重定向 URL 失败:%#v", err)
-					handler.ReverseProxy(ctx.Writer, ctx.Request)
-					return
-				}
-				ctx.Redirect(http.StatusFound, res.url)
-				return
-
-			case constants.UnknownStrm:
+		if *mediasource.ID != mediaSourceID {
+			continue
+		}
+		if mediasource.Path == nil {
+			logging.Warningf("MediaSource (ID: %s) 的 Path 为空", *mediasource.ID)
+			break
+		}
+		if mediasource.Protocol != nil && *mediasource.Protocol == jellyfin.HTTP {
+			target := handler.httpStrmHandler(*mediasource.Path, ctx.Request.UserAgent())
+			if !utils.IsSafeRedirectURL(target) { // 只允许 http/https 跳转
+				logging.Warningf("HTTPStrm 重定向目标协议不合法，转回上游：%s", utils.MaskSensitiveURL(target))
 				handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
 				return
 			}
+			ctx.Redirect(http.StatusFound, target)
+			return
 		}
+		logging.Debugf("MediaSource (ID: %s) 不是 HTTP 协议，不进行重定向", *mediasource.ID)
+		break
 	}
+
+	// 未产生 302 重定向，回退到上游服务器
+	handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
 }
 
 var _ MediaServerHandler = (*JellyfinHandler)(nil) // 确保 JellyfinHandler 实现 MediaServerHandler 接口

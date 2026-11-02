@@ -7,6 +7,7 @@ import (
 
 	"github.com/AkimioJR/MediaWarp/constants"
 	"github.com/AkimioJR/MediaWarp/internal/logging"
+	"github.com/AkimioJR/MediaWarp/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -18,7 +19,7 @@ func Logger() gin.HandlerFunc {
 		path := ctx.Request.URL.Path
 		query := ctx.Request.URL.RawQuery
 		if query != "" {
-			path = path + "?" + query
+			path = path + "?" + utils.MaskSensitiveQuery(query) // 脱敏 api_key 等敏感参数
 		}
 
 		startTime := time.Now()

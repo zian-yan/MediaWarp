@@ -5,42 +5,103 @@
 MEDIAWARP
 ├─.github
 │  └─workflows          # 工作流相关
-├─api                   # Alist、EmbyServer等服务器的开放接口
 ├─config                # MediaWarp配置文件
-├─constants             # 存放一些常量
-├─core                  # MediaWarp核心组织，包括配置读取、日志等
+├─constants             # 存放一些常量（媒体服务器类型、正则、Strm 类型）
 ├─docs                  # MediaWarp相关文档
-├─handlers              # MediaWarp请求处理函数
-│  └─handlers_emby      # 处理服务器为EmbySever的一些函数
+├─docker                # Dockerfile（源码构建）与 Dockerfile.ci（预编译产物打包）
 ├─img                   # MediaWarp演示图片
+├─internal
+│  ├─config             # 配置读取、启动期校验与目录管理
+│  ├─handler            # 请求处理：HTTPStrm 302、PlaybackInfo 修正、反向代理
+│  ├─logging            # 访问日志 / 服务日志
+│  ├─middleware         # 访问日志、panic 恢复、客户端过滤、图片/字幕缓存
+│  ├─router             # 路由与中间件链
+│  └─service            # Emby / Jellyfin 开放接口客户端
 ├─logs                  # MediaWarp输出日志
-├─middleware            # Gin框架用到的中间件，包括访问日志、客户端过滤
-├─utils                   # 一些工具集合
-├─resources             # 内嵌的一些JavaScript脚本、CSS样式
-│  ├─css
-│  └─js
-├─router                # MediaWarp的API路由部分
-├─schemas               # API响应结构体
-│  ├─schemas_alist
-│  └─schemas_emby
-└─static                # MediaWarp自定义静态文件存储目录
+└─utils                 # 一些工具集合
 ```
 
-# 本地测试
-## 构建所有版本
-```BASH
-goreleaser release --snapshot --clean --skip-publish
-```
-## 流程测试
-```BASH
-goreleaser release --snapshot --clean --skip-publish --rm-dist
+## 配置加载
+
+配置只有配置文件一个入口，**不存在 Web 页面或 Web 管理接口**，改完需重启进程。
+
+- 入口：`config.Init(path)`，`--config` 可指定路径，默认 `config/config.yaml`
+- 流程：`os.ReadFile` → `yaml.Unmarshal` 到 `Setting` → 赋值到包级变量 → `validate()`
+- 加载只发生一次：启动后没有任何回写、热重载或配置监听逻辑
+- 失败处理：任一步返回错误，`main` 直接 panic 并打印原因（退出码非 0）
+
+启动期校验（`validate`）只拦「配错一定跑不起来」的项：
+
+| 校验项 | 规则 |
+| --- | --- |
+| `port` | 1-65535，缺失或为 0 直接报错；超过 uint16 在 yaml 解析阶段就会失败 |
+| `server.type` | 只能 `Emby` / `Jellyfin`，其他值在 yaml 解析阶段失败 |
+| `server.addr` | 非空、必须 `http://` 或 `https://` 开头、必须有主机名 |
+| `client.list` | 白名单模式下不能为空，否则所有请求都会被 403 |
+
+以下属于合法配置，不做拦截：缓存 TTL ≤ 0（关闭该项缓存）、`http_strm.enable` 为 true 但 `prefix_list` 为空（启动时打印警告，302 不会命中）。
+
+配置文件字段（`internal/config/type.go`）：
+
+| 段 | 字段 | 说明 |
+| --- | --- | --- |
+| 顶层 | `port` | MediaWarp 监听端口 |
+| `server` | `type` / `addr` / `auth` | 上游媒体服务器类型、地址（端口即代理端口）、API 密钥 |
+| `log` | `access.console/file`、`service.console/file` | 两套日志各自是否输出到终端 / 文件 |
+| `cache` | `enable`、`http_strm_ttl`、`image_ttl`、`subtitle_ttl` | 缓存总开关与各项 TTL（时长格式 `1m` / `2h`，≤ 0 关闭） |
+| `client` | `enable`、`mode`、`list` | 客户端过滤开关、黑白名单模式与 UA 关键字 |
+| `http_strm` | `enable`、`proxy`、`final_url`、`compatibility_mode`、`prefix_list` | 302 重定向相关开关与 Strm 路径前缀 |
+
+> 旧配置文件里残留的 `web:` 段会被 yaml 静默忽略，不影响启动，但已无任何作用。
+
+## 启动流程
+
+1. `flag.Parse()` 解析 `--version` / `--debug` / `--config`
+2. `config.Init` 加载并校验配置
+3. `logging.Init` 按配置挂载终端输出与按天切割的文件钩子
+4. `handler.Init` 按 `server.type` 构建上游处理器（Emby / Jellyfin），全局唯一，运行期不再变更
+5. `router.InitRouter` 组装中间件链与正则路由，缓存池在此一次性建立
+6. `net.Listen` 显式监听 `:port`，端口不可用立刻 panic；随后 `http.Server.Serve`
+7. 收到 `SIGINT` / `SIGTERM` 后 5 秒优雅退出
+
+## Docker 镜像与发布
+
+三个工作流分工：`build-binary.yaml` 交叉编译 6 个平台二进制（Linux amd64/arm64、macOS amd64/arm64、Windows amd64/arm64）→ `build-docker.yaml` 把其中 Linux 的两个打进镜像并推送 → `dev.yaml`（push main）/`release.yaml`（push tag）负责编排。
+
+`build-docker.yaml` 为 `workflow_call`，输入参数：
+
+| 输入 | 说明 |
+| --- | --- |
+| `push` | 是否推送镜像；`false` 仅构建 |
+| `tags` | `docker/metadata-action` 的 tag 规则，如 `type=ref,event=tag` |
+| `platforms` | 目标平台，默认 `linux/amd64,linux/arm64` |
+
+发布目标（自动判断）：
+
+- `ghcr.io/<owner>/<repo>`：始终发布，使用内置 `GITHUB_TOKEN`，需要 `packages: write` 权限
+- `docker.io/<DOCKERHUB_USERNAME>/mediawarp`：仅当 `DOCKERHUB_USERNAME` 与 `DOCKERHUB_TOKEN` 都已配置时才发布，未配置会在日志里给出 notice 并跳过
+- 镜像名统一转小写（GitHub 仓库名含大写时 ghcr 会拒绝推送）
+
+产物映射：`docker/Dockerfile.ci` 用 `COPY --chmod=755 targets/${TARGETPLATFORM}/MediaWarp`，所以工作流把 artifact 按 `targets/linux/amd64/MediaWarp`、`targets/linux/arm64/MediaWarp` 摆放。目前只支持 `linux/amd64` 与 `linux/arm64` 两个平台，平台与 artifact 的对应关系写在同一处的 `case` 分支里；新增平台需同时改 `build-binary.yaml` 矩阵与这个 `case`，否则会在准备阶段显式报错。
+
+`docker/Dockerfile` 是源码构建版（多阶段，`golang` 构建 + `alpine` 运行），供本地构建与 CI 校验使用；CI 的 `docker-build` 作业只构建不推送。
+
+# 本地构建
+
+## 编译二进制
+```bash
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o MediaWarp .
 ```
 
-## 参数含义
-1. **snapshot**: 这将跳过标签验证，并生成一个快照版本
-2. **clean**: 清除上一次生成的 dist
-3. **skip-publish**: 跳过推送镜像到 Docker Registry
-4. **rm-dist**：删除 dist
+## 构建镜像
+```bash
+# 单架构（本机）
+docker build -f docker/Dockerfile -t mediawarp:dev .
+
+# 多架构（需要 buildx + QEMU）
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -f docker/Dockerfile -t mediawarp:dev --load .
+```
 
 # 媒体服务器部分 API 具体响应
 ## EmbyServer

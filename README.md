@@ -14,7 +14,7 @@
 
 # MediaWarp
 
-MediaWarp 是**前置于 EmbyServer/Jellyfin/飞牛影视 的反向代理服务器**，修改了原媒体服务器返回响应以实现特殊功能  
+MediaWarp 是**前置于 EmbyServer/Jellyfin 的反向代理服务器**，修改了原媒体服务器返回响应以实现 Strm 302 直链播放
 
 [![prs][prs-badge]][prs]
 [![issues][issues-badge]][issues]
@@ -24,7 +24,7 @@ MediaWarp 是**前置于 EmbyServer/Jellyfin/飞牛影视 的反向代理服务�
 
 
 [功能](#功能) •
-[TODO LIST](#todo-list) •
+[精简说明](#精简说明) •
 [文档](#相关文档) •
 [鸣谢](#鸣谢) •
 [贡献者](#star-history) •
@@ -33,67 +33,70 @@ MediaWarp 是**前置于 EmbyServer/Jellyfin/飞牛影视 的反向代理服务�
 </div>
 
 # 功能
-- Strm 文件可以实现 302 直链播放，流量不经过 Emby Server / Jellyfin Server / 飞牛影视服务器
+
+> 本分支为**精简版**，仅保留三项功能：**HTTPStrm 实现 302 重定向**、**屏蔽特定客户端访问**、**缓存与日志**。
+
+- Strm 文件可以实现 302 直链播放，流量不经过 Emby Server / Jellyfin Server
   - **推荐配合 [AutoFilm](https://github.com/AkimioJR/AutoFilm) 使用**
   - 已通过测试客户端（Web、iOS Emby、Infuse、Conflux、Fileball、Vidhub）
-  - 支持 Strm：
-    - HTTPStrm：Strm 文件内容是 HTTP 链接，浏览器访问链接可以直接下载到视频文件（**客户端需要可以访问到该链接，MediaWarp 不需要访问到该地址**）
-    - AlistStrm：Strm 文件内容是 AList 上视频文件的路径（**路径需要采用 utf-8 编码格式**；仅支持 **AList v3 API的服务I**，目前 **OpenList 兼容 AList v3 API**；**客户端无需访问到 AList 服务器，仅需要 MediaWarp 可以访问到 AList 服务器，但是需要可以访问到 AList 服务器上文件的 raw_url 属性，如果使用网盘存储则无需在意这一点，但目前兼容性较差且不支持转码，通过挂载真实目录可以缓解这一问题**）
+  - 支持 Strm：HTTPStrm，Strm 文件内容是 HTTP 链接，浏览器访问链接可以直接下载到视频文件（**客户端需要可以访问到该链接，MediaWarp 不需要访问到该地址**）
+  - 可选开启 `final_url`，重定向前先解析出最终地址，减少客户端重定向次数
+  - 可选开启 `proxy`，允许保留媒体服务器的串流、转码能力
 
 - 屏蔽特定客户端访问
-  
+
   <img src="./img/client_filter.png" alt="" width=500px /> 
 
-- 自定义 Web 前端样式（HTML、CSS、JavaScript）
-  - 效果演示：
+  - 按 User-Agent 关键字匹配，支持黑名单（BlackList）/ 白名单（WhiteList）两种模式
 
-    <img src="./img/index.jpg" alt="首页" width=310px /> 
-    <img src="./img/movie.jpg" alt="电影" width=310px />
-    <img src="./img/series.jpg" alt="电视剧" width=310px />
-    <img src="./img/danmaku.png" alt="danmaku 弹幕" width=310px />
+- 缓存与日志
+  - 内存缓存：图片、字幕、HTTPStrm 重定向结果，TTL 可配置（`0` 表示关闭该项）
+  - 日志：访问日志与服务日志分离，均支持输出到终端和按天切割的文件
 
-- 内置嵌入脚本（括号内是支持的媒体服务器）
-  - ExternalPlayerUrl：调用外部播放器（Emby/Jellyfin）
-  - crx：美化包 [emby-crx](https://github.com/Nolovenodie/emby-crx)；[jellyfin-crx](https://github.com/newday-life/jellyfin-crx)（Emby/Jellyfin）
-  - ActorPlus：隐藏没有头像的演员和制作人员（Emby/Jellyfin）
-  - FanartShow：显示同人图（fanart 图）（Emby/Jellyfin）
-  - Danmaku：Web 弹幕（emby：[9channel/dd-danmaku](https://github.com/9channel/dd-danmaku)；jellyfin：[Jellyfin/jellyfin-danmaku](https://github.com/Izumiko/jellyfin-danmaku)；FNTV：[fn-danmaku.js](static/fn-danmaku/fn-danmaku.js)）
-  - VideoTogether：[一起看](https://2gether.video)（Emby/Jellyfin/FNTV）
-  - ~~BeautifyCSS：Emby 美化 CSS 样式~~（已移除，若有需求请通过自定义 Web.Head 功能实现）
+- 配置方式：**只有配置文件一个入口**（`config/config.yaml`，参考 `config/config.yaml.example`）
+  - 项目不包含任何 Web 页面或 Web 管理接口，编辑配置文件后**重启进程**生效
+  - 启动时校验监听端口、上游地址、白名单名单等关键项，配置错误直接退出并打印原因
 
-- 飞牛影视
-  
-  ![HTTPStrm](./img/FNTV-HTTPStrm.png)
-  ![AlistStrm](./img/FNTV-AlistStrm.png)
+# 精简说明
 
-# TODO LIST
-- [x] HTTPStrm 实现 302 重定向
-- [x] 屏蔽特定客户端访问
-- [x] 提供多种 Web 前端美化功能
-- [x] AlistStrm 实现 302 重定向
-- [x] 嵌入一些实用的 JavaScript 方便使用
-- [x] 缓存图片、字幕提高性能
-- [x] ~~多格式配置文件（优先级：JSON > TOML > YAML > YML > Java properties > Java props，格式参考[config.yaml.example](./config/config.yaml.example)）~~
-- [x] 支持通过 `--config` 参数指定配置文件地址
-- [x] ART 字幕转 ASS 字幕（仅 Emby）
-- [ ] ASS 字幕字体子集化并嵌入字体
-- [x] 适配 Emby
-- [x] 适配 Jellyfin
-- [ ] 适配 Plex
-- [x] 适配 飞牛影视
-- [x] 支持播放网盘转码内容（仅飞牛影视 AlistStrm 模式）
+以下功能已从本分支移除，如需要请使用[上游仓库](https://github.com/AkimioJR/MediaWarp)：
 
-- [ ] ~~利用 Redis 做数据缓存~~
-  > 需求不大，放弃，有需要可以直接使用 Nginx 或者其他反向代理工具的缓存
+| 已移除 | 说明 |
+| --- | --- |
+| AlistStrm 302 重定向 | `alist_strm` 配置、Alist API 客户端、转码资源列表 |
+| Web 前端美化 | `/MediaWarp/static`、`/MediaWarp/custom`、`robots.txt`、内置 JS 脚本、`custom` 目录 |
+| Web 配置管理页面 | `/MediaWarp/config` 页面与 `/MediaWarp/api/config` 接口、`web` 配置段、配置热重载 |
+| 字幕处理 | `subtitle` 配置、SRT 转 ASS、字体子集化 |
+| 飞牛影视（FNTV）适配 | 媒体服务器类型仅剩 Emby、Jellyfin |
+| 版本查询接口 | 已移除 `/MediaWarp/version`，保留 `--version` 命令行参数 |
 
-- [ ] ~~多服务器转码推流~~
-  > 需求不大，放弃
+# Docker 部署
 
-- [ ] ~~利用 Mysql / PostgreSQL / Redis 优化 Infuse 媒体库模式下扫库体验~~
-  > 有需要可以参考 [MisakaFxxk/MisakaF_Emby/Infuse](https://github.com/MisakaFxxk/MisakaF_Emby/tree/main/Infuse) 自行实现
+镜像由 GitHub Actions 自动构建，同一份多架构清单同时推送到 Docker Hub 与 GitHub Packages：
 
-- [ ] ~~多服务器负载均衡~~
-  > 在服务器前面加一个负载均衡可能更好
+| 仓库 | 镜像地址 |
+| --- | --- |
+| Docker Hub | `akimio/mediawarp` |
+| GitHub Packages（ghcr.io） | `ghcr.io/zian-yan/mediawarp` |
+
+支持架构：`linux/amd64`、`linux/arm64`。`docker pull` 会自动拉取当前机器对应的架构，无需手动指定。
+
+```bash
+# 启动前先准备 /config/config.yaml（可参考 config/config.yaml.example）
+docker run -d \
+  --name mediawarp \
+  --restart unless-stopped \
+  -p 9000:9000 \
+  -v /path/to/config:/config \
+  -v /path/to/logs:/logs \
+  -e TZ=Asia/Shanghai \
+  akimio/mediawarp:latest
+
+# 也可以直接从 GitHub Packages 拉取
+docker pull ghcr.io/zian-yan/mediawarp:latest
+```
+
+配置只通过 `config/config.yaml` 修改，改完重启容器生效（`docker restart mediawarp`）。容器内未内置 `config.yaml`，缺少该文件会启动失败；把 `config/config.yaml.example` 复制成 `config.yaml` 再改即可。
 
 # 相关文档
 - [教程文档](https://blog.akimio.top/posts/1041/)

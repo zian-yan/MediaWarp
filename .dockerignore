@@ -1,0 +1,24 @@
+# 镜像构建上下文收敛用
+# 注意：不带前导斜杠的模式会匹配任意层级（例如 MediaWarp 会连带排除
+# targets/linux/amd64/MediaWarp），因此需要排除的顶层文件一律写成 /xxx 锚定形式。
+
+# 版本控制与工程配置
+/.git
+/.github
+/.gitignore
+/.gitmodules
+/.workbuddy
+
+# 构建产物与运行数据
+/dist
+/logs
+/custom
+/MediaWarp
+/*.exe
+
+# 本地真实配置，避免把密钥打进镜像（示例文件保留）
+/config/config.yaml
+
+# 文档与截图
+/docs
+/img

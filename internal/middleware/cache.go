@@ -2,12 +2,16 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
+	"time"
 
 	"github.com/AkimioJR/MediaWarp/internal/logging"
+	"github.com/AkimioJR/MediaWarp/utils"
 
 	"github.com/allegro/bigcache/v3"
 	"github.com/gin-gonic/gin"
@@ -41,22 +45,36 @@ func ParseCacheData(data []byte) (*CacheData, error) {
 	return &cacheData, nil
 }
 
+// maxCacheableBodySize 单个缓存条目的响应体上限
+//
+// 超过该大小的响应照常转发给客户端，但不写入缓存，
+// 避免大文件把内存缓冲撑爆
+const maxCacheableBodySize = 8 << 20 // 8 MiB
+
 // 自定义的请求响应器
 //
 // 用于记录缓存数据
 type WriterWarp struct {
 	gin.ResponseWriter
-	Body bytes.Buffer
+	Body     bytes.Buffer
+	overflow bool // 响应体超过 maxCacheableBodySize，放弃缓存
 }
 
 var _ gin.ResponseWriter = (*WriterWarp)(nil)
 
 func (w *WriterWarp) Write(data []byte) (int, error) {
-	w.Body.Write(data)
+	if w.Body.Len()+len(data) <= maxCacheableBodySize {
+		w.Body.Write(data)
+	} else {
+		w.overflow = true
+	}
 	return w.ResponseWriter.Write(data)
 }
 
-var _ gin.ResponseWriter = (*WriterWarp)(nil)
+// WriteString 走 Write，保证缓冲内容与实际响应一致
+func (w *WriterWarp) WriteString(s string) (int, error) {
+	return w.Write([]byte(s))
+}
 
 // 计算Key时忽略的查询参数
 var CacheKeyIgnoreQuery = []string{
@@ -110,8 +128,6 @@ func getCacheKey(ctx *gin.Context) string {
 	var (
 		path  string     = ctx.Request.URL.Path    // 请求路径
 		query url.Values = ctx.Request.URL.Query() // 查询参数
-		// header    http.Header = ctx.Request.Header      // 请求头
-		// headerStr string      = ""                      // 请求头字符串
 	)
 
 	// 将查询参数转化为字符串
@@ -123,64 +139,100 @@ func getCacheKey(ctx *gin.Context) string {
 		query[key] = values
 	}
 
-	// 将请求头转化为字符串
-	// for _, key := range cacheKeyIgnoreHeaders {
-	// 	header.Del(key)
-	// }
-	// headKeys := make([]string, 0, len(header))
-	// for key := range header {
-	// 	headKeys = append(headKeys, key)
-	// }
-	// sort.Strings(headKeys) // 对请求头的键进行排序
-	// for _, key := range headKeys {
-	// 	sort.Strings(header[key]) // 对请求头的值进行排序
-	// 	headerStr += fmt.Sprintf("%s=%s;", key, strings.Join(header[key], "|"))
-	// }
-
-	return path + query.Encode() // + headerStr
+	// 凭据指纹参与缓存键：不同用户互不命中，未认证请求无法窃取已缓存的授权响应
+	return path + query.Encode() + "|" + credentialFingerprint(ctx)
 }
 
-func getCacheBaseFunc(cachePool *bigcache.BigCache, cacheName string, reg string) gin.HandlerFunc {
+// credentialFingerprint 提取请求凭据并生成短指纹
+//
+// 缓存键中只放指纹、不放原始凭据，避免密钥随 CacheKey 落入访问日志
+func credentialFingerprint(ctx *gin.Context) string {
+	query := ctx.Request.URL.Query()
+	for _, key := range []string{"api_key", "ApiKey"} {
+		if v := query.Get(key); v != "" {
+			return utils.MD5Hash(key+"="+v)[:16]
+		}
+	}
+	if v := ctx.GetHeader("X-Emby-Token"); v != "" {
+		return utils.MD5Hash("x-emby-token="+v)[:16]
+	}
+	if v := ctx.GetHeader("Authorization"); v != "" {
+		return utils.MD5Hash("authorization="+v)[:16]
+	}
+	return "anonymous"
+}
+
+// NewCache 创建缓存中间件
+//
+// reg 为 nil 或 ttl ≤ 0 时该中间件直接放行；缓存池在创建时建立一次，
+// 运行期不会因配置变化重建（改 TTL 需重启进程）
+func NewCache(name string, reg *regexp.Regexp, ttl time.Duration) gin.HandlerFunc {
+	if reg == nil || ttl <= 0 {
+		return func(ctx *gin.Context) { ctx.Next() }
+	}
+
+	cacheConfig := bigcache.DefaultConfig(ttl)
+	cacheConfig.HardMaxCacheSize = 256 // 缓存池内存上限（MB），防止长期运行无限增长
+	cachePool, err := bigcache.New(context.Background(), cacheConfig)
+	if err != nil {
+		logging.Warningf("创建 %s 缓存失败: %v", name, err)
+		return func(ctx *gin.Context) { ctx.Next() }
+	}
+	logging.Infof("%s缓存已启用, TTL: %s", name, ttl)
+
 	return func(ctx *gin.Context) {
-		cacheKey := getCacheKey(ctx)
-		logging.AccessDebugf(ctx, "命中 %s 缓存正则表达式: %s, CacheKey: %s", cacheName, reg, cacheKey)
-		if cacheByte, err := cachePool.Get(cacheKey); err == nil {
-			if cacheData, err := ParseCacheData(cacheByte); err == nil {
-				logging.AccessDebugf(ctx, "命中 %s 缓存: %s", cacheName, cacheKey)
-				cacheData.WriteResponse(ctx)
-				ctx.Abort()
-				return
-			} else {
-				logging.AccessWarningf(ctx, "解析 %s 缓存失败: %v", cacheName, err)
-			}
+		if ctx.Request.Method != http.MethodGet || !reg.MatchString(ctx.Request.URL.Path) {
+			ctx.Next()
+			return
 		}
+		cacheFunc(ctx, cachePool, name, reg.String())
+	}
+}
 
-		writer := &WriterWarp{
-			ResponseWriter: ctx.Writer,
-			Body:           bytes.Buffer{},
-		}
-		ctx.Writer = writer
-
-		ctx.Next() // 处理请求
-
-		code := ctx.Writer.Status()
-		if code >= http.StatusOK && code < http.StatusMultipleChoices { // 响应是2xx的成功响应，更新缓存记录
-			cacheData := &CacheData{ // 创建缓存数据
-				StatusCode: code, //ctx.Request.Response.StatusCode,
-				Header:     ctx.Writer.Header().Clone(),
-				Body:       writer.Body.Bytes(),
-			}
-
-			if cacheByte, err := cacheData.Json(); err == nil {
-				err = cachePool.Set(cacheKey, cacheByte)
-				if err != nil {
-					logging.AccessWarningf(ctx, "写入 %s 缓存失败: %v", cacheName, err)
-				} else {
-					logging.AccessDebugf(ctx, "写入 %s 缓存成功", cacheName)
-				}
-			}
+func cacheFunc(ctx *gin.Context, cachePool *bigcache.BigCache, cacheName string, reg string) {
+	cacheKey := getCacheKey(ctx)
+	logging.AccessDebugf(ctx, "命中 %s 缓存正则表达式: %s, CacheKey: %s", cacheName, reg, cacheKey)
+	if cacheByte, err := cachePool.Get(cacheKey); err == nil {
+		if cacheData, err := ParseCacheData(cacheByte); err == nil {
+			logging.AccessDebugf(ctx, "命中 %s 缓存: %s", cacheName, cacheKey)
+			cacheData.WriteResponse(ctx)
+			ctx.Abort()
+			return
 		} else {
-			logging.AccessDebugf(ctx, "响应码为: %d, 不进行 %s 缓存", code, cacheName)
+			logging.AccessWarningf(ctx, "解析 %s 缓存失败: %v", cacheName, err)
 		}
+	}
+
+	writer := &WriterWarp{
+		ResponseWriter: ctx.Writer,
+		Body:           bytes.Buffer{},
+	}
+	ctx.Writer = writer
+
+	ctx.Next() // 处理请求
+
+	if writer.overflow { // 响应体过大，不落缓存
+		logging.AccessDebugf(ctx, "响应体超过 %d 字节，不进行 %s 缓存", maxCacheableBodySize, cacheName)
+		return
+	}
+
+	code := ctx.Writer.Status()
+	if code >= http.StatusOK && code < http.StatusMultipleChoices { // 响应是2xx的成功响应，更新缓存记录
+		cacheData := &CacheData{ // 创建缓存数据
+			StatusCode: code, //ctx.Request.Response.StatusCode,
+			Header:     ctx.Writer.Header().Clone(),
+			Body:       writer.Body.Bytes(),
+		}
+
+		if cacheByte, err := cacheData.Json(); err == nil {
+			err = cachePool.Set(cacheKey, cacheByte)
+			if err != nil {
+				logging.AccessWarningf(ctx, "写入 %s 缓存失败: %v", cacheName, err)
+			} else {
+				logging.AccessDebugf(ctx, "写入 %s 缓存成功", cacheName)
+			}
+		}
+	} else {
+		logging.AccessDebugf(ctx, "响应码为: %d, 不进行 %s 缓存", code, cacheName)
 	}
 }

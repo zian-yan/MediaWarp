@@ -36,27 +36,13 @@ type BaseLoggerSetting struct {
 }
 
 // 缓存设置
+//
+// 保留下来的缓存项：HTTPStrm 重定向结果、图片、字幕
 type CacheSetting struct {
 	Enable      bool          `yaml:"enable"`
 	HTTPStrmTTL time.Duration `yaml:"http_strm_ttl"`
-	AlistAPITTL time.Duration `yaml:"alist_api_ttl"`
 	ImageTTL    time.Duration `yaml:"image_ttl"`
 	SubtitleTTL time.Duration `yaml:"subtitle_ttl"`
-}
-
-// Web前端自定义设置
-type WebSetting struct {
-	Enable            bool   `yaml:"enable"`              // 启用自定义前端设置
-	Custom            bool   `yaml:"custom"`              // 启用用户自定义静态资源
-	Index             bool   `yaml:"index"`               // 是否从 custom 目录读取 index.html 文件作为首页
-	Head              string `yaml:"head"`                // 添加到 index.html 的 HEAD 中
-	Robots            string `yaml:"robots"`              // 自定义 robots.txt，若为空表示不修改
-	ExternalPlayerUrl bool   `yaml:"external_player_url"` // 是否开启外置播放器
-	Crx               bool   `yaml:"crx"`                 // crx 美化
-	ActorPlus         bool   `yaml:"actor_plus"`          // 过滤没有头像的演员和制作人员
-	FanartShow        bool   `yaml:"fanart_show"`         // 显示同人图（fanart图）
-	Danmaku           bool   `yaml:"danmaku"`             // Web 弹幕
-	VideoTogether     bool   `yaml:"video_together"`      // VideoTogether
 }
 
 // 客户端User-Agent过滤设置
@@ -75,39 +61,11 @@ type HTTPStrmSetting struct {
 	PrefixList        []string `yaml:"prefix_list"`
 }
 
-// AlistStrm具体设置
-type AlistSetting struct {
-	ADDR       string   `yaml:"addr"`
-	Username   string   `yaml:"username"`
-	Password   string   `yaml:"password"`
-	Token      *string  `yaml:"token"`
-	PrefixList []string `yaml:"prefix_list"`
-}
-
-// AlistStrm播放设置
-type AlistStrmSetting struct {
-	Enable bool           `yaml:"enable"`
-	Proxy  bool           `yaml:"proxy"`   // 开启后支持媒体服务器串流、转码播放
-	RawURL bool           `yaml:"raw_url"` // 是否使用原始 URL
-	List   []AlistSetting `yaml:"list"`
-}
-
-// 字幕设置
-type SubtitleSetting struct {
-	Enable   bool     `yaml:"enable"`
-	SRT2ASS  bool     `yaml:"srt2ass"` // SRT 字幕转 ASS 字幕
-	ASSStyle []string `yaml:"ass_style"`
-	SubSet   bool     `yaml:"subset"` // ASS 字幕字体子集化
-}
-
 type Setting struct {
 	Port         uint16              `yaml:"port"`
 	MediaServer  MediaServerSetting  `yaml:"server"`
 	Logger       LoggerSetting       `yaml:"log"`
 	Cache        CacheSetting        `yaml:"cache"`
-	Web          WebSetting          `yaml:"web"`
 	ClientFilter ClientFilterSetting `yaml:"client"`
 	HTTPStrm     HTTPStrmSetting     `yaml:"http_strm"`
-	AlistStrm    AlistStrmSetting    `yaml:"alist_strm"`
-	Subtitle     SubtitleSetting     `yaml:"subtitle"`
 }

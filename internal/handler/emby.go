@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/AkimioJR/MediaWarp/constants"
-	"github.com/AkimioJR/MediaWarp/internal/config"
 	"github.com/AkimioJR/MediaWarp/internal/logging"
 	"github.com/AkimioJR/MediaWarp/internal/service/emby"
 	"github.com/AkimioJR/MediaWarp/utils"
@@ -22,19 +21,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// // 带引用计数的互斥锁
-// type mutexWithRefCount struct {
-// 	mu       sync.Mutex
-// 	refCount int32 // 使用 atomic 操作
-// }
-
 // Emby服务器处理器
 type EmbyHandler struct {
 	client          *emby.Client           // Emby客户端
 	routerRules     []RegexpRouteRule      // 正则路由规则
 	proxy           *httputil.ReverseProxy // 反向代理
 	httpStrmHandler StrmHandlerFunc
-	// playbackInfoMutex sync.Map // 视频流处理并发控制，确保同一个 item ID 的重定向请求串行化，避免重复获取缓存
 }
 
 // 初始化
@@ -72,31 +64,6 @@ func NewEmbyServerHandler(addr string, apiKey string) (*EmbyHandler, error) {
 				),
 			},
 		}
-
-		if config.Web.Enable {
-			if config.Web.Index || config.Web.Head != "" || config.Web.ExternalPlayerUrl || config.Web.VideoTogether {
-				handler.routerRules = append(handler.routerRules,
-					RegexpRouteRule{
-						Regexp: constants.EmbyRegexp.Router.ModifyIndex,
-						Handler: responseModifyCreater(
-							handler.proxy.Rewrite,
-							generateWebModifier(constants.EMBY),
-						),
-					},
-				)
-			}
-		}
-		if config.Subtitle.Enable && config.Subtitle.SRT2ASS {
-			handler.routerRules = append(handler.routerRules,
-				RegexpRouteRule{
-					Regexp: constants.EmbyRegexp.Router.ModifySubtitles,
-					Handler: responseModifyCreater(
-						handler.proxy.Rewrite,
-						handler.ModifySubtitles,
-					),
-				},
-			)
-		}
 	}
 	handler.httpStrmHandler, err = getHTTPStrmHandler()
 	if err != nil {
@@ -126,7 +93,7 @@ func (handler *EmbyHandler) GetSubtitleCacheRegexp() *regexp.Regexp {
 // 修改播放信息请求
 //
 // /Items/:itemId/PlaybackInfo
-// 强制将 HTTPStrm 设置为支持直链播放和转码、AlistStrm 设置为支持直链播放并且禁止转码
+// 强制将 HTTPStrm 设置为支持直链播放，未开启 proxy 时禁用转码
 func (handler *EmbyHandler) ModifyPlaybackInfo(rw *http.Response) error {
 	startTime := time.Now()
 	defer func() {
@@ -189,29 +156,17 @@ func (handler *EmbyHandler) ModifyPlaybackInfo(rw *http.Response) error {
 			continue
 		}
 
-		strmFileType, opt := recgonizeStrmFileType(*item.Path)
-		switch strmFileType {
-		case constants.HTTPStrm: // HTTPStrm 设置支持直链播放并且禁止转码
-			processHTTPStrmPlaybackInfo(
-				jsonChain,
-				bsePath,
-				*mediasource.ItemID,
-				*mediasource.ID,
-				mediasource.DirectStreamURL,
-			)
-
-		case constants.AlistStrm: // AlistStm 设置支持直链播放并且禁止转码
-			processAlistStrmPlaybackInfo(
-				jsonChain,
-				bsePath,
-				*mediasource.ItemID,
-				*mediasource.ID,
-				opt.(string),
-				mediasource.DirectStreamURL,
-				*item.Path,
-				mediasource.Size,
-			)
+		if !matchHTTPStrmPath(*item.Path) {
+			continue
 		}
+
+		processHTTPStrmPlaybackInfo(
+			jsonChain,
+			bsePath,
+			*mediasource.ItemID,
+			*mediasource.ID,
+			mediasource.DirectStreamURL,
+		)
 
 		logging.Debugf("处理 %s 的 MediaSource %s 耗时：%s", *item.Path, *mediasource.ID, time.Since(startTime))
 	}
@@ -230,7 +185,7 @@ func (handler *EmbyHandler) ModifyPlaybackInfo(rw *http.Response) error {
 
 // 视频流处理器
 //
-// 支持播放本地视频、重定向 HttpStrm、AlistStrm
+// 支持播放本地视频、重定向 HTTPStrm
 func (handler *EmbyHandler) VideosHandler(ctx *gin.Context) {
 	if ctx.Request.Method == http.MethodHead { // 不额外处理 HEAD 请求
 		handler.ReverseProxy(ctx.Writer, ctx.Request)
@@ -274,7 +229,10 @@ func (handler *EmbyHandler) VideosHandler(ctx *gin.Context) {
 		return
 	}
 
-	strmFileType, opt := recgonizeStrmFileType(*item.Path)
+	if !matchHTTPStrmPath(*item.Path) { // 不是 HTTPStrm
+		handler.ReverseProxy(ctx.Writer, ctx.Request)
+		return
+	}
 
 	for _, mediasource := range item.MediaSources {
 		if mediasource.ID == nil {
@@ -283,59 +241,29 @@ func (handler *EmbyHandler) VideosHandler(ctx *gin.Context) {
 		}
 		logging.Debugf("mediasource.ID: %s ; mediaSourceID: %s ; mediaSourceID_without_prefix: %s", *mediasource.ID, mediaSourceID, mediaSourceID_without_prefix)
 		// EmbyServer >= 4.9 返回的ID带有前缀mediasource_
-		if strings.Replace(*mediasource.ID, "mediasource_", "", 1) == mediaSourceID_without_prefix {
-			if mediasource.Path == nil {
-				logging.Warningf("MediaSource (ID: %s) 的 Path 为空", *mediasource.ID)
+		if strings.Replace(*mediasource.ID, "mediasource_", "", 1) != mediaSourceID_without_prefix {
+			continue
+		}
+		if mediasource.Path == nil {
+			logging.Warningf("MediaSource (ID: %s) 的 Path 为空", *mediasource.ID)
+			break
+		}
+		if mediasource.Protocol != nil && *mediasource.Protocol == emby.HTTP {
+			target := handler.httpStrmHandler(*mediasource.Path, ctx.Request.UserAgent())
+			if !utils.IsSafeRedirectURL(target) { // 只允许 http/https 跳转
+				logging.Warningf("HTTPStrm 重定向目标协议不合法，转回上游：%s", utils.MaskSensitiveURL(target))
 				handler.ReverseProxy(ctx.Writer, ctx.Request)
 				return
 			}
-			switch strmFileType {
-			case constants.HTTPStrm:
-				if mediasource.Protocol != nil && *mediasource.Protocol == emby.HTTP {
-					ctx.Redirect(http.StatusFound, handler.httpStrmHandler(*mediasource.Path, ctx.Request.UserAgent()))
-					return
-				}
-
-			case constants.AlistStrm: // 无需判断 *mediasource.Container 是否以Strm结尾，当 AlistStrm 存储的位置有对应的文件时，*mediasource.Container 会被设置为文件后缀
-				res, err := alistStrmHandler(*mediasource.Path, opt.(string), false)
-				if err != nil {
-					logging.Warningf("获取 AlistStrm 重定向 URL 失败: %#v", err)
-					handler.ReverseProxy(ctx.Writer, ctx.Request)
-					return
-				}
-				ctx.Redirect(http.StatusFound, res.url)
-				return
-
-			case constants.UnknownStrm:
-				handler.ReverseProxy(ctx.Writer, ctx.Request)
-				return
-			}
+			ctx.Redirect(http.StatusFound, target)
+			return
 		}
-	}
-}
-
-// 修改字幕
-//
-// 将 SRT 字幕转 ASS
-func (handler *EmbyHandler) ModifySubtitles(rw *http.Response) error {
-	defer rw.Body.Close()
-	subtitile, err := io.ReadAll(rw.Body) // 读取字幕文件
-	if err != nil {
-		logging.Warning("读取原始字幕 Body 出错：", err)
-		return err
+		logging.Debugf("MediaSource (ID: %s) 不是 HTTP 协议，不进行重定向", *mediasource.ID)
+		break
 	}
 
-	if utils.IsSRT(subtitile) { // 判断是否为 SRT 格式
-		logging.Info("字幕文件为 SRT 格式")
-		if config.Subtitle.SRT2ASS {
-			logging.Info("已将 SRT 字幕已转为 ASS 格式")
-			assSubtitle := utils.SRT2ASS(subtitile, config.Subtitle.ASSStyle)
-			rw.Header.Set("Content-Length", strconv.Itoa(len(assSubtitle)))
-			rw.Body = io.NopCloser(bytes.NewReader(assSubtitle))
-			return nil
-		}
-	}
-	return nil
+	// 未产生 302 重定向，回退到上游服务器
+	handler.ReverseProxy(ctx.Writer, ctx.Request)
 }
 
 // 修改 basehtmlplayer.js

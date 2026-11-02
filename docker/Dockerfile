@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 FROM golang:1.26 AS builder
 
 ARG APP_VERSION=dev
@@ -18,11 +20,14 @@ RUN go mod download && \
     -X github.com/AkimioJR/MediaWarp/internal/config.buildDate=${BUILD_DATE}" \
     -o MediaWarp
 
-FROM alpine:latest
-COPY --from=builder /builder/MediaWarp /MediaWarp
+FROM alpine:3.21
 
-RUN chmod +x /MediaWarp
+# ca-certificates：解析 HTTPS 直链（final_url）时校验系统根证书
+# tzdata：容器内时区与日志时间（配合 TZ / /etc/localtime）
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY --chmod=755 --from=builder /builder/MediaWarp /MediaWarp
 
 EXPOSE 9000
-VOLUME ["/etc/localtime", "/etc/timezone", "/config", "/logs", "/custom"]
+VOLUME ["/etc/localtime", "/etc/timezone", "/config", "/logs"]
 ENTRYPOINT ["/MediaWarp"]

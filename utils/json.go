@@ -3,7 +3,6 @@ package utils
 import (
 	"io"
 
-	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
@@ -61,10 +60,6 @@ func (json *JsonChain) Delete(path string) *JsonChain {
 
 	json.data, json.err = sjson.DeleteBytes(json.data, path)
 	return json
-}
-
-func (json *JsonChain) Get(path string) gjson.Result {
-	return gjson.GetBytes(json.data, path)
 }
 
 func (json *JsonChain) Result() ([]byte, error) {
