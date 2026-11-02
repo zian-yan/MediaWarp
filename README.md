@@ -4,8 +4,6 @@
 [issues-badge]: https://img.shields.io/badge/Issues-welcome-brightgreen.svg?style=flat-square
 [release]: https://github.com/AkimioJR/MediaWarp/releases/latest
 [release-badge]: https://img.shields.io/github/v/release/AkimioJR/MediaWarp?style=flat-square
-[docker]: https://hub.docker.com/r/akimio/mediawarp
-[docker-badge]: https://img.shields.io/docker/pulls/akimio/mediawarp?color=%2348BB78&logo=docker&label=pulls
 [telegram]: https://t.me/AkimioJR_MediaWarp
 [telegram-badge]: https://img.shields.io/badge/Telegram-blue?logo=Telegram
 
@@ -19,7 +17,6 @@ MediaWarp 是**前置于 EmbyServer/Jellyfin 的反向代理服务器**，修改
 [![prs][prs-badge]][prs]
 [![issues][issues-badge]][issues]
 [![release][release-badge]][release]
-[![docker][docker-badge]][docker]
 [![telegram][telegram-badge]][telegram]
 
 
@@ -72,12 +69,7 @@ MediaWarp 是**前置于 EmbyServer/Jellyfin 的反向代理服务器**，修改
 
 # Docker 部署
 
-镜像由 GitHub Actions 自动构建，同一份多架构清单同时推送到 Docker Hub 与 GitHub Packages：
-
-| 仓库 | 镜像地址 |
-| --- | --- |
-| Docker Hub | `akimio/mediawarp` |
-| GitHub Packages（ghcr.io） | `ghcr.io/zian-yan/mediawarp` |
+镜像由 GitHub Actions 自动构建并推送到 GitHub Packages，镜像地址：`ghcr.io/zian-yan/mediawarp`
 
 支持架构：`linux/amd64`、`linux/arm64`。`docker pull` 会自动拉取当前机器对应的架构，无需手动指定。
 
@@ -90,9 +82,9 @@ docker run -d \
   -v /path/to/config:/config \
   -v /path/to/logs:/logs \
   -e TZ=Asia/Shanghai \
-  akimio/mediawarp:latest
+  ghcr.io/zian-yan/mediawarp:latest
 
-# 也可以直接从 GitHub Packages 拉取
+# 也可以只拉取镜像
 docker pull ghcr.io/zian-yan/mediawarp:latest
 ```
 
