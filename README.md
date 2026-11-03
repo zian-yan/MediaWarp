@@ -1,23 +1,8 @@
-[prs]: https://github.com/AkimioJR/MediaWarp
-[prs-badge]: https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square
-[issues]: https://github.com/AkimioJR/MediaWarp/issues/new
-[issues-badge]: https://img.shields.io/badge/Issues-welcome-brightgreen.svg?style=flat-square
-[release]: https://github.com/AkimioJR/MediaWarp/releases/latest
-[release-badge]: https://img.shields.io/github/v/release/AkimioJR/MediaWarp?style=flat-square
-[telegram]: https://t.me/AkimioJR_MediaWarp
-[telegram-badge]: https://img.shields.io/badge/Telegram-blue?logo=Telegram
-
-
 <div align="center">
 
 # MediaWarp
 
 MediaWarp 是**前置于 EmbyServer/Jellyfin 的反向代理服务器**，修改了原媒体服务器返回响应以实现 Strm 302 直链播放
-
-[![prs][prs-badge]][prs]
-[![issues][issues-badge]][issues]
-[![release][release-badge]][release]
-[![telegram][telegram-badge]][telegram]
 
 
 [功能](#功能) •
@@ -60,7 +45,6 @@ MediaWarp 是**前置于 EmbyServer/Jellyfin 的反向代理服务器**，修改
 | --- | --- |
 | AlistStrm 302 重定向 | `alist_strm` 配置、Alist API 客户端、转码资源列表 |
 | Web 前端美化 | `/MediaWarp/static`、`/MediaWarp/custom`、`robots.txt`、内置 JS 脚本、`custom` 目录 |
-| Web 配置管理页面 | `/MediaWarp/config` 页面与 `/MediaWarp/api/config` 接口、`web` 配置段、配置热重载 |
 | 字幕处理 | `subtitle` 配置、SRT 转 ASS、字体子集化 |
 | 飞牛影视（FNTV）适配 | 媒体服务器类型仅剩 Emby、Jellyfin |
 | 版本查询接口 | 已移除 `/MediaWarp/version`，保留 `--version` 命令行参数 |
