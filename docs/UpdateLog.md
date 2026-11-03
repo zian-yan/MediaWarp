@@ -202,3 +202,11 @@
   - 启动内存由 ~550MB 降至 ~6MB，图片/字幕各限 32MiB、HTTPStrm 8MiB、单条 4MiB，可回收
   - 缓存体不再走 JSON/base64 编码，并修复缓存中间件替换 ResponseWriter 后未还原的问题
   - 修复日志文件句柄每日重开、并发写无锁的问题
+- 2026.11.4: v1.1.0
+  - 缓存池预算上调：图片缓存池 32MiB → 64MiB，HTTPStrm 重定向缓存池 8MiB → 16MiB，字幕池维持 32MiB
+  - 缓存预算改为 `middleware.NewCache` 入参（`ImagePoolBytes` / `SubtitlePoolBytes`），图片与字幕不再共用同一上限常量
+  - 响应新增 `X-Cache: HIT` / `X-Cache: MISS` 头，客户端与 curl 可直接确认本次是否命中缓存
+  - 新增缓存命中率采样日志：每 500 次查询输出命中率、条目数与占用字节，运行期可观测
+  - 新增 `cache.Cache.Stats()` 一致性快照，暴露命中、未命中、条目数与占用字节
+  - 修复缓存写入时把 `X-Cache: MISS` 一并克隆进缓存、导致命中回放误报的问题
+  - 清理全部 Go 源码注释

@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	appVersion string = "v1.0.1"
+	appVersion string = "v1.1.0"
 	commitHash string = "Unkown"
 	buildDate  string = "Unkown"
 )
