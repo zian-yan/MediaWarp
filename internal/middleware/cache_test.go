@@ -15,8 +15,8 @@ func newCacheTestEngine(reg *regexp.Regexp, ttl time.Duration, body []byte, stat
 	gin.SetMode(gin.TestMode)
 	calls := 0
 	r := gin.New()
-	r.NoRoute(NewCache("测试", reg, ttl), func(ctx *gin.Context) {
-		calls++ // 每次真正回源才计数
+	r.NoRoute(NewCache("测试", reg, ttl, ImagePoolBytes), func(ctx *gin.Context) {
+		calls++
 		ctx.Data(status, "image/jpeg", body)
 	})
 	return r, &calls
@@ -54,7 +54,6 @@ func TestCacheMiddlewareHitsOnSecondRequest(t *testing.T) {
 	}
 }
 
-// 不同凭据不共享缓存，避免越权读到别人的授权响应
 func TestCacheMiddlewareIsolatesCredentials(t *testing.T) {
 	body := []byte("img")
 	reg := regexp.MustCompile(`^/Items/\d+/Images/Primary$`)
@@ -68,7 +67,6 @@ func TestCacheMiddlewareIsolatesCredentials(t *testing.T) {
 	}
 }
 
-// 非 2xx 响应不落缓存
 func TestCacheMiddlewareSkipsNon2xx(t *testing.T) {
 	reg := regexp.MustCompile(`^/Items/\d+/Images/Primary$`)
 	r, calls := newCacheTestEngine(reg, time.Minute, []byte("nope"), http.StatusNotFound)
@@ -81,7 +79,6 @@ func TestCacheMiddlewareSkipsNon2xx(t *testing.T) {
 	}
 }
 
-// 超过单条上限的响应不缓存，但必须完整转发给客户端
 func TestCacheMiddlewareSkipsOversizeBody(t *testing.T) {
 	body := bytes.Repeat([]byte("y"), maxCacheableBodySize+1)
 	reg := regexp.MustCompile(`^/Items/\d+/Images/Primary$`)
@@ -99,7 +96,25 @@ func TestCacheMiddlewareSkipsOversizeBody(t *testing.T) {
 	}
 }
 
-// 未命中缓存规则的请求直接放行
+func TestCacheMiddlewareMarksHitAndMiss(t *testing.T) {
+	reg := regexp.MustCompile(`^/Items/\d+/Images/Primary$`)
+	r, _ := newCacheTestEngine(reg, time.Minute, []byte("img"), http.StatusOK)
+
+	first := serve(r, "/Items/1/Images/Primary", "tok")
+	second := serve(r, "/Items/1/Images/Primary", "tok")
+	third := serve(r, "/Items/1/Images/Primary", "tok")
+
+	if got := first.Header().Get(cacheHeader); got != "MISS" {
+		t.Errorf("首次响应 %s = %q，期望 MISS", cacheHeader, got)
+	}
+	if got := second.Header().Get(cacheHeader); got != "HIT" {
+		t.Errorf("第二次响应 %s = %q，期望 HIT", cacheHeader, got)
+	}
+	if got := third.Header().Get(cacheHeader); got != "HIT" {
+		t.Errorf("第三次响应 %s = %q，期望 HIT（MISS 不得随缓存回放）", cacheHeader, got)
+	}
+}
+
 func TestCacheMiddlewarePassThrough(t *testing.T) {
 	reg := regexp.MustCompile(`^/Items/\d+/Images/Primary$`)
 	r, calls := newCacheTestEngine(reg, time.Minute, []byte("ok"), http.StatusOK)
@@ -112,7 +127,6 @@ func TestCacheMiddlewarePassThrough(t *testing.T) {
 	}
 }
 
-// TTL <= 0 时中间件退化为直通
 func TestNewCacheDisabled(t *testing.T) {
 	reg := regexp.MustCompile(`^/Items/\d+/Images/Primary$`)
 	r, calls := newCacheTestEngine(reg, 0, []byte("ok"), http.StatusOK)

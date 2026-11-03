@@ -9,15 +9,11 @@ import (
 	"github.com/AkimioJR/MediaWarp/utils"
 )
 
-// HTTPStrm 处理器
-//
-// 输入 Strm 文件内容（HTTP 链接），输出用于 302 重定向的链接
 type StrmHandlerFunc func(content string, ua string) string
 
-// 重定向结果缓存：键是 strm 内容，值是最终 URL
 const (
-	strmCacheMaxBytes      = 8 << 20 // 8 MiB 总预算
-	strmCacheMaxEntryBytes = 8 << 10 // 单条上限 8 KiB
+	strmCacheMaxBytes      = 16 << 20
+	strmCacheMaxEntryBytes = 8 << 10
 )
 
 func getHTTPStrmHandler() (StrmHandlerFunc, error) {
@@ -27,15 +23,14 @@ func getHTTPStrmHandler() (StrmHandlerFunc, error) {
 			TTL:           config.Cache.HTTPStrmTTL,
 			MaxBytes:      strmCacheMaxBytes,
 			MaxEntryBytes: strmCacheMaxEntryBytes,
-			SizeOf:        func(v string) int64 { return int64(len(v)) + 256 }, // 加上键的粗略开销
+			SizeOf:        func(v string) int64 { return int64(len(v)) + 256 },
 		})
 		logging.Infof("启用 HTTPStrm 缓存，TTL: %s, 上限: %d MiB", config.Cache.HTTPStrmTTL, strmCacheMaxBytes>>20)
 	}
 
-	client := &http.Client{ // 创建自定义HTTP客户端配置
+	client := &http.Client{
 		Timeout: RedirectTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// 禁止自动重定向，以便手动处理
 			return http.ErrUseLastResponse
 		},
 	}
