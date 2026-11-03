@@ -49,13 +49,6 @@ func TestResolveEmbyAPIKVPairs(t *testing.T) {
 	}
 }
 
-// goos: darwin
-// goarch: arm64
-// pkg: MediaWarp/utils
-// cpu: Apple M1
-// BenchmarkStringConcat
-// BenchmarkStringConcat-8   	  542830	     25741 ns/op	  275330 B/op	       1 allocs/op
-// 测试字符串拼接
 func BenchmarkStringConcat(b *testing.B) {
 	s := ""
 	for i := 0; i < b.N; i++ {
@@ -63,13 +56,6 @@ func BenchmarkStringConcat(b *testing.B) {
 	}
 }
 
-// goos: darwin
-// goarch: arm64
-// pkg: MediaWarp/utils
-// cpu: Apple M1
-// BenchmarkByteAppend
-// BenchmarkByteAppend-8   	819340761	         1.597 ns/op	       6 B/op	       0 allocs/op
-// 测试 []byte 的 append
 func BenchmarkByteAppend(b *testing.B) {
 	buf := make([]byte, 0)
 	for i := 0; i < b.N; i++ {
@@ -78,15 +64,6 @@ func BenchmarkByteAppend(b *testing.B) {
 	_ = string(buf)
 }
 
-// goos: darwin
-// goarch: arm64
-// pkg: MediaWarp/utils
-// cpu: Apple M1
-// BenchmarkStringBuilder
-// BenchmarkStringBuilder-8   	430995778	         2.531 ns/op	       5 B/op	       0 allocs/op
-// PASS
-// ok  	MediaWarp/utils	1.829s
-// // 测试 strings.Builder
 func BenchmarkStringBuilder(b *testing.B) {
 	var sb strings.Builder
 	for i := 0; i < b.N; i++ {
@@ -95,12 +72,6 @@ func BenchmarkStringBuilder(b *testing.B) {
 	_ = sb.String()
 }
 
-// goos: darwin
-// goarch: arm64
-// pkg: MediaWarp/utils
-// cpu: Apple M1
-// BenchmarkMethod1
-// BenchmarkMethod1-8   	11925727	        86.93 ns/op	      80 B/op	       2 allocs/op
 func BenchmarkMethod1(b *testing.B) {
 	header := "Header"
 	style := []string{"Style1", "Style2"}
@@ -112,12 +83,6 @@ func BenchmarkMethod1(b *testing.B) {
 	}
 }
 
-// goos: darwin
-// goarch: arm64
-// pkg: MediaWarp/utils
-// cpu: Apple M1
-// BenchmarkMethod2
-// BenchmarkMethod2-8   	14530182	        82.06 ns/op	      80 B/op	       2 allocs/op
 func BenchmarkMethod2(b *testing.B) {
 	header := "Header"
 	style := []string{"Style1", "Style2"}

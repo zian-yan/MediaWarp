@@ -3,8 +3,8 @@ package constants
 import "regexp"
 
 type CacheRegexps struct {
-	Image    *regexp.Regexp // 图片缓存匹配
-	Subtitle *regexp.Regexp // 字幕缓存匹配
+	Image    *regexp.Regexp
+	Subtitle *regexp.Regexp
 }
 
 type EmbyRegexps struct {
@@ -14,13 +14,13 @@ type EmbyRegexps struct {
 }
 
 type RouterRegexps struct {
-	VideosHandler        *regexp.Regexp // 普通视频处理接口匹配
-	ModifyBaseHtmlPlayer *regexp.Regexp // 修改 Web 的 basehtmlplayer.js
-	ModifyPlaybackInfo   *regexp.Regexp // 播放信息处理接口
+	VideosHandler        *regexp.Regexp
+	ModifyBaseHtmlPlayer *regexp.Regexp
+	ModifyPlaybackInfo   *regexp.Regexp
 }
 
 type OthersRegexps struct {
-	VideoRedirectReg *regexp.Regexp // 视频重定向匹配，统一视频请求格式
+	VideoRedirectReg *regexp.Regexp
 }
 
 var EmbyRegexp = &EmbyRegexps{
@@ -32,9 +32,6 @@ var EmbyRegexp = &EmbyRegexps{
 	Others: OthersRegexps{
 		VideoRedirectReg: regexp.MustCompile(`(?i)^(/emby)?/videos/(.*)/stream/(.*)`),
 	},
-	// /emby/Items/6/Images/Primary
-	// /emby/Items/13/Images/Primary
-	// /emby/Items/123/Images/Chapter/0
 	Cache: CacheRegexps{
 		Image:    regexp.MustCompile(`(?i)^(/emby)?/Items/\d+/Images(/.*)?$`),
 		Subtitle: regexp.MustCompile(`(?i)/Videos/(.*)/Subtitles/(.*)/Stream\.(ass|ssa|srt|)?$`),
@@ -42,8 +39,8 @@ var EmbyRegexp = &EmbyRegexps{
 }
 
 type JellyfinRouterRegexps struct {
-	VideosHandler      *regexp.Regexp // 普通视频处理接口匹配
-	ModifyPlaybackInfo *regexp.Regexp // 播放信息处理接口
+	VideosHandler      *regexp.Regexp
+	ModifyPlaybackInfo *regexp.Regexp
 }
 type JellyfinRegexps struct {
 	Router JellyfinRouterRegexps
@@ -52,16 +49,12 @@ type JellyfinRegexps struct {
 
 var JellyfinRegexp = &JellyfinRegexps{
 	Router: JellyfinRouterRegexps{
-		VideosHandler:      regexp.MustCompile(`/Videos/[\w-]+/(stream|original)(\.\w+)?$`), // /Videos/813a630bcf9c3f693a2ec8c498f868d2/stream /Videos/205953b114bb8c9dc2c7ba7e44b8024c/stream.mp4
+		VideosHandler:      regexp.MustCompile(`/Videos/[\w-]+/(stream|original)(\.\w+)?$`),
 		ModifyPlaybackInfo: regexp.MustCompile(`^/Items/\w+/PlaybackInfo$`),
 	},
 	Cache: CacheRegexps{
-		// /Items/19ba9e43f0db12e2eea4294609ec1a0c/Images/Primary
-		// /Items/20524938b33d516922ccea207555315b/Images/Backdrop/0
-		// /Items/abc123/Images/Chapter/0
 		Image: regexp.MustCompile(`(?i)/Items/\w+/Images(/.*)?$`),
 
-		// /Videos/6c252d46-952c-5b0d-5f0e-f6e3036c0a39/6c252d46952c5b0d5f0ef6e3036c0a39/Subtitles/2/0/Stream.ass
 		Subtitle: regexp.MustCompile(`(?i)/Videos/(.*)/Subtitles/(.*)/Stream\.(ass|ssa|srt|)?$`),
 	},
 }

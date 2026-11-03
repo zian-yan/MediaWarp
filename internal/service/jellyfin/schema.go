@@ -5,14 +5,12 @@ type Response struct {
 	TotalRecordCount *int64        `json:"TotalRecordCount,omitempty"`
 }
 
-// /Items/:itemID/PlaybackInfo的响应
 type PlaybackInfoResponse struct {
 	ErrorCode     *PlaybackErrorCode `json:"ErrorCode,omitempty"`
 	MediaSources  []MediaSourceInfo  `json:"MediaSources,omitempty"`
 	PlaySessionID *string            `json:"PlaySessionId,omitempty"`
 }
 
-// PlaybackErrorCode
 type PlaybackErrorCode string
 
 const (
@@ -21,7 +19,6 @@ const (
 	RateLimitExceeded  PlaybackErrorCode = "RateLimitExceeded"
 )
 
-// BaseItemDto
 type BaseItemDto struct {
 	AffiliateCallSign            *string                  `json:"AffiliateCallSign,omitempty"`
 	AirDays                      []DayOfWeek              `json:"AirDays,omitempty"`
@@ -179,13 +176,11 @@ type BaseItemDto struct {
 	Width                        *int64                   `json:"Width"`
 }
 
-// NameIdPair
 type NameIDPair struct {
 	ID   *string `json:"Id,omitempty"`
 	Name *string `json:"Name,omitempty"`
 }
 
-// ChapterInfo
 type ChapterInfo struct {
 	ChapterIndex       *int64      `json:"ChapterIndex,omitempty"`
 	ImageTag           *string     `json:"ImageTag,omitempty"`
@@ -194,25 +189,22 @@ type ChapterInfo struct {
 	StartPositionTicks *int64      `json:"StartPositionTicks,omitempty"`
 }
 
-// ExternalUrl
 type ExternalURL struct {
 	Name *string `json:"Name,omitempty"`
 	URL  *string `json:"Url,omitempty"`
 }
 
-// NameLongIdPair
 type NameLongIDPair struct {
 	ID   *int64  `json:"Id,omitempty"`
 	Name *string `json:"Name,omitempty"`
 }
 
-// MediaSourceInfo
 type MediaSourceInfo struct {
 	AddAPIKeyToDirectStreamURL *bool                     `json:"AddApiKeyToDirectStreamUrl,omitempty"`
 	AnalyzeDurationMS          *int64                    `json:"AnalyzeDurationMs,omitempty"`
 	Bitrate                    *int64                    `json:"Bitrate,omitempty"`
 	BufferMS                   *int64                    `json:"BufferMs,omitempty"`
-	Container                  *string                   `json:"Container,omitempty"` // HTTPStrm 显示 strm，普通视频显示实际容器
+	Container                  *string                   `json:"Container,omitempty"`
 	ContainerStartTimeTicks    *int64                    `json:"ContainerStartTimeTicks,omitempty"`
 	DefaultAudioStreamIndex    *int64                    `json:"DefaultAudioStreamIndex,omitempty"`
 	DefaultSubtitleStreamIndex *int64                    `json:"DefaultSubtitleStreamIndex,omitempty"`
@@ -221,15 +213,15 @@ type MediaSourceInfo struct {
 	EncoderProtocol            *MediaProtocol            `json:"EncoderProtocol,omitempty"`
 	Formats                    []string                  `json:"Formats,omitempty"`
 	HasMixedProtocols          *bool                     `json:"HasMixedProtocols,omitempty"`
-	ID                         *string                   `json:"Id,omitempty"` // mediasource_45
+	ID                         *string                   `json:"Id,omitempty"`
 	IsInfiniteStream           *bool                     `json:"IsInfiniteStream,omitempty"`
-	IsRemote                   *bool                     `json:"IsRemote,omitempty"` // HTTPStrm 会被设置为 true
+	IsRemote                   *bool                     `json:"IsRemote,omitempty"`
 	ItemID                     *string                   `json:"ItemId,omitempty"`
 	LiveStreamID               *string                   `json:"LiveStreamId,omitempty"`
-	MediaStreams               []MediaStream             `json:"MediaStreams"` // 避免当 MediaStreams 为空数组的情况移除该字段导致导致部分客户端（目前已知：Yamby）报错
+	MediaStreams               []MediaStream             `json:"MediaStreams"`
 	Name                       *string                   `json:"Name,omitempty"`
 	OpenToken                  *string                   `json:"OpenToken,omitempty"`
-	Path                       *string                   `json:"Path,omitempty"` // 本地视频文件则是正常的本地路径，Strm 则是 Strm 文件的内容
+	Path                       *string                   `json:"Path,omitempty"`
 	ProbePath                  *string                   `json:"ProbePath,omitempty"`
 	ProbeProtocol              *MediaProtocol            `json:"ProbeProtocol,omitempty"`
 	Protocol                   *MediaProtocol            `json:"Protocol,omitempty"`
@@ -256,7 +248,6 @@ type MediaSourceInfo struct {
 	WallClockStart             *string                   `json:"WallClockStart,omitempty"`
 }
 
-// MediaStream
 type MediaStream struct {
 	AspectRatio                     *string                 `json:"AspectRatio,omitempty"`
 	AttachmentSize                  *int64                  `json:"AttachmentSize"`
@@ -314,7 +305,6 @@ type MediaStream struct {
 	Width                           *int64                  `json:"Width"`
 }
 
-// BaseItemPerson
 type BaseItemPerson struct {
 	ID              *string     `json:"Id,omitempty"`
 	Name            *string     `json:"Name,omitempty"`
@@ -323,13 +313,11 @@ type BaseItemPerson struct {
 	Type            *PersonType `json:"Type,omitempty"`
 }
 
-// MediaUrl
 type MediaURL struct {
 	Name *string `json:"Name,omitempty"`
 	URL  *string `json:"Url,omitempty"`
 }
 
-// UserItemDataDto
 type UserItemDataDto struct {
 	IsFavorite            *bool    `json:"IsFavorite,omitempty"`
 	ItemID                *string  `json:"ItemId,omitempty"`
@@ -344,7 +332,6 @@ type UserItemDataDto struct {
 	UnplayedItemCount     *int64   `json:"UnplayedItemCount"`
 }
 
-// DayOfWeek
 type DayOfWeek string
 
 const (
@@ -357,7 +344,6 @@ const (
 	Wednesday DayOfWeek = "Wednesday"
 )
 
-// MarkerType
 type MarkerType string
 
 const (
@@ -367,7 +353,6 @@ const (
 	IntroStart   MarkerType = "IntroStart"
 )
 
-// Drawing.ImageOrientation
 type DrawingImageOrientation string
 
 const (
@@ -381,7 +366,6 @@ const (
 	TopRight    DrawingImageOrientation = "TopRight"
 )
 
-// LocationType
 type LocationType string
 
 const (
@@ -389,7 +373,6 @@ const (
 	Virtual    LocationType = "Virtual"
 )
 
-// MetadataFields
 type MetadataFields string
 
 const (
@@ -413,7 +396,6 @@ const (
 	Tags                  MetadataFields = "Tags"
 )
 
-// MediaProtocol
 type MediaProtocol string
 
 const (
@@ -427,7 +409,6 @@ const (
 	UDP  MediaProtocol = "Udp"
 )
 
-// SubtitleDeliveryMethod
 type SubtitleDeliveryMethod string
 
 const (
@@ -438,7 +419,6 @@ const (
 	SubtitleDeliveryMethodVideoSideData SubtitleDeliveryMethod = "VideoSideData"
 )
 
-// ExtendedVideoSubTypes
 type ExtendedVideoSubTypes string
 
 const (
@@ -462,7 +442,6 @@ const (
 	Hdr10Plus0                         ExtendedVideoSubTypes = "Hdr10Plus0"
 )
 
-// ExtendedVideoTypes
 type ExtendedVideoTypes string
 
 const (
@@ -473,7 +452,6 @@ const (
 	Hdr10Plus                       ExtendedVideoTypes = "Hdr10Plus"
 )
 
-// SubtitleLocationType
 type SubtitleLocationType string
 
 const (
@@ -481,7 +459,6 @@ const (
 	SubtitleLocationTypeVideoSideData SubtitleLocationType = "VideoSideData"
 )
 
-// MediaStreamType
 type MediaStreamType string
 
 const (
@@ -494,7 +471,6 @@ const (
 	Video         MediaStreamType = "Video"
 )
 
-// TransportStreamTimestamp
 type TransportStreamTimestamp string
 
 const (
@@ -503,16 +479,14 @@ const (
 	Zero                         TransportStreamTimestamp = "Zero"
 )
 
-// MediaSourceType
 type MediaSourceType string
 
 const (
-	Default     MediaSourceType = "Default"  // 普通视频显示 Default
-	Grouping    MediaSourceType = "Grouping" // HTTPStrm 显示 Grouping
+	Default     MediaSourceType = "Default"
+	Grouping    MediaSourceType = "Grouping"
 	Placeholder MediaSourceType = "Placeholder"
 )
 
-// Video3DFormat
 type Video3DFormat string
 
 const (
@@ -523,7 +497,6 @@ const (
 	MVC              Video3DFormat = "MVC"
 )
 
-// PersonType
 type PersonType string
 
 const (
@@ -537,7 +510,6 @@ const (
 	Writer    PersonType = "Writer"
 )
 
-// SyncJobItemStatus
 type SyncJobItemStatus string
 
 const (
@@ -549,7 +521,6 @@ const (
 	Transferring    SyncJobItemStatus = "Transferring"
 )
 
-// LiveTv.TimerType
 type LiveTvTimerType string
 
 const (

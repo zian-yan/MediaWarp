@@ -12,20 +12,19 @@ func sortSlice[T comparable](slice []T) {
 }
 
 type SetInterface[T comparable] interface {
-	Add(value T)                      // 添加元素
-	Adds(values ...T)                 // 添加多个元素
-	Remove(value T)                   // 删除元素
-	Contains(value T) bool            // 判断元素是否存在
-	Len() int                         // 计算集合元素数量
-	Values() []T                      // 获取集合所有元素并排序
-	Equal(other SetInterface[T]) bool // 判断两个集合是否相等
+	Add(value T)
+	Adds(values ...T)
+	Remove(value T)
+	Contains(value T) bool
+	Len() int
+	Values() []T
+	Equal(other SetInterface[T]) bool
 }
 
 func NewSet[T comparable]() SetInterface[T] {
 	return &Set[T]{elements: make(map[T]struct{})}
 }
 
-// 集合对象
 type Set[T comparable] struct {
 	elements map[T]struct{}
 }

@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	accessLogger  = logrus.New() // 访问日志
-	serviceLogger = logrus.New() // 服务日志
+	accessLogger  = logrus.New()
+	serviceLogger = logrus.New()
 )
 
 func init() {
@@ -21,11 +21,8 @@ func init() {
 	serviceLogger.SetFormatter(&LoggerServiceFormatter{})
 }
 
-// 初始化日志输出
-//
-// 只在启动时调用一次，输出目标（终端 / 文件）由配置决定
 func Init() {
-	serviceLogger.SetReportCaller(false) // 关闭报告调用方
+	serviceLogger.SetReportCaller(false)
 
 	if config.Logger.AccessLogger.Console {
 		accessLogger.SetOutput(os.Stdout)
@@ -46,9 +43,6 @@ func Init() {
 	}
 }
 
-// 访问日志
-//
-// 默认日志级别为 Info
 func AccessLogf(format string, args ...any) {
 	accessLogger.Info(fmt.Sprintf(format, args...))
 }
@@ -69,9 +63,6 @@ func AccessWarningf(ctx *gin.Context, format string, args ...any) {
 	accessLogger.Warning(formatAccessLog(ctx, logrus.WarnLevel, fmt.Sprintf(format, args...)))
 }
 
-// 服务日志
-//
-// Debug 级别日志
 func Debug(args ...any) {
 	serviceLogger.Debug(args...)
 }
@@ -80,9 +71,6 @@ func Debugf(format string, args ...any) {
 	serviceLogger.Debugf(format, args...)
 }
 
-// 服务日志
-//
-// Info 级别日志
 func Info(args ...any) {
 	serviceLogger.Info(args...)
 }
@@ -91,9 +79,6 @@ func Infof(format string, args ...any) {
 	serviceLogger.Infof(format, args...)
 }
 
-// 服务日志
-//
-// Warning 级别日志
 func Warning(args ...any) {
 	serviceLogger.Warning(args...)
 }
@@ -102,9 +87,6 @@ func Warningf(format string, args ...any) {
 	serviceLogger.Warningf(format, args...)
 }
 
-// 服务日志
-//
-// Error 级别日志
 func Error(args ...any) {
 	serviceLogger.Error(args...)
 }
@@ -113,9 +95,6 @@ func Errorf(format string, args ...any) {
 	serviceLogger.Errorf(format, args...)
 }
 
-// 服务日志
-//
-// 设置日志级别
 func SetLevel(level logrus.Level) {
 	accessLogger.SetLevel(level)
 	serviceLogger.SetLevel(level)

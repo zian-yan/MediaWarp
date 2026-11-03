@@ -12,14 +12,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 记录访问日志
 func Logger() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		method := ctx.Request.Method
 		path := ctx.Request.URL.Path
 		query := ctx.Request.URL.RawQuery
 		if query != "" {
-			path = path + "?" + utils.MaskSensitiveQuery(query) // 脱敏 api_key 等敏感参数
+			path = path + "?" + utils.MaskSensitiveQuery(query)
 		}
 
 		startTime := time.Now()
@@ -43,7 +42,6 @@ func Logger() gin.HandlerFunc {
 	}
 }
 
-// 根据Http状态码和Http请求方法获取颜色
 func getColor(statusCode int, method string) (constants.Color, constants.Color) {
 	var statusColor, methodColor constants.Color
 	switch {

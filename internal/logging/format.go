@@ -15,22 +15,19 @@ import (
 type LoggerServiceFormatter struct{}
 
 func (l *LoggerServiceFormatter) Format(entry *logrus.Entry) ([]byte, error) {
-	// 根据日志级别设置颜色
 	colorCode := getLogColor(entry.Level)
 
-	// 设置文本Buffer
 	var b *bytes.Buffer
 	if entry.Buffer == nil {
 		b = &bytes.Buffer{}
 	} else {
 		b = entry.Buffer
 	}
-	// 时间格式化
 	formatTime := entry.Time.Format(time.DateTime)
 
 	fmt.Fprintf(
 		b,
-		"%s\t%s | %s\n", // 长度需要算是上控制字符的长度
+		"%s\t%s | %s\n",
 		colorCode.ColorString("【"+strings.ToUpper(entry.Level.String())+"】"),
 		formatTime,
 		entry.Message,
@@ -42,7 +39,6 @@ var _ logrus.Formatter = (*LoggerServiceFormatter)(nil)
 
 type LoggerAccessFormatter struct{}
 
-// 实现Format方法
 func (l *LoggerAccessFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	var b *bytes.Buffer
 	if entry.Buffer == nil {

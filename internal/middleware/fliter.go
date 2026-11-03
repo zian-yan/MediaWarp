@@ -11,9 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 客户端过滤器
-//
-// 名单在启动时读取一次，修改配置后需重启进程生效
 func ClientFilter() gin.HandlerFunc {
 	enabled := config.ClientFilter.Enable
 	mode := config.ClientFilter.Mode
@@ -27,11 +24,11 @@ func ClientFilter() gin.HandlerFunc {
 
 		userAgent := ctx.Request.UserAgent()
 		var allowed bool
-		if userAgent == "" { // 开启了客户端过滤器后禁止所有未提供User-Agent的链接
+		if userAgent == "" {
 			allowed = false
 		} else {
 			switch mode {
-			case constants.WHITELIST: // 白名单模式
+			case constants.WHITELIST:
 				allowed = false
 				for _, ua := range clientList {
 					if strings.Contains(userAgent, ua) {
@@ -39,7 +36,7 @@ func ClientFilter() gin.HandlerFunc {
 						break
 					}
 				}
-			case constants.BLACKLIST: // 黑名单模式
+			case constants.BLACKLIST:
 				allowed = true
 				for _, ua := range clientList {
 					if strings.Contains(userAgent, ua) {
@@ -50,7 +47,7 @@ func ClientFilter() gin.HandlerFunc {
 			}
 		}
 		if !allowed {
-			ctx.AbortWithStatus(http.StatusForbidden) // 禁止访问
+			ctx.AbortWithStatus(http.StatusForbidden)
 			logging.Info("客户端过滤器拦截了请求，User-Agent: ", userAgent)
 			return
 		}

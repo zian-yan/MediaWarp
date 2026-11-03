@@ -15,30 +15,22 @@ import (
 
 type Client struct {
 	baseURL *url.URL
-	apiKey  string // 认证方式：APIKey；获取方式：Jellyfin 控制台 -> 高级 -> API密钥
+	apiKey  string
 	client  *http.Client
 }
 
-// 获取媒体服务器类型
 func (client *Client) GetType() constants.MediaServerType {
 	return constants.JELLYFIN
 }
 
-// 获取 Jellyfin 连接地址
-//
-// 包含协议、服务器域名（IP）、端口号
-// 示例：return "http://jellyfin.example.com:8096"
 func (client *Client) GetBaseURLString() string {
 	return client.baseURL.String()
 }
 
-// 获取 Jellyfin 的API Key
 func (client *Client) GetAPIKey() string {
 	return client.apiKey
 }
 
-// ItemsService
-// /Items
 func (client *Client) ItemsServiceQueryItem(ids string, limit int, fields string) (*Response, error) {
 	var (
 		params       = url.Values{}
@@ -55,7 +47,6 @@ func (client *Client) ItemsServiceQueryItem(ids string, limit int, fields string
 	if err != nil {
 		return nil, err
 	}
-	// Jellyfin 12 移除了小写的 api_key 查询参数（返回 401），改用标准的 Authorization 头（兼容 10.11+）
 	req.Header.Set("Authorization", fmt.Sprintf("MediaBrowser Token=\"%s\"", client.GetAPIKey()))
 
 	resp, err := client.client.Do(req)
@@ -82,7 +73,6 @@ func (client *Client) ItemsServiceQueryItem(ids string, limit int, fields string
 	return itemResponse, nil
 }
 
-// 获取 Jellyfin 实例
 func New(baseURL string, apiKey string) (*Client, error) {
 	parsedURL, err := url.Parse(baseURL)
 	if err != nil {

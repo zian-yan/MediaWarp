@@ -10,9 +10,6 @@ import (
 	"github.com/AkimioJR/MediaWarp/utils"
 )
 
-// 修改 HTTPStrm 的 PlaybackInfo 响应
-//
-// 强制其支持直链播放；未开启 proxy 时禁用转码，并把直链指回 MediaWarp，由 MediaWarp 完成 302
 func processHTTPStrmPlaybackInfo(jsonChain *utils.JsonChain, bsePath string, itemId string, id string, directStreamURL *string) {
 	startTime := time.Now()
 	defer func() {
@@ -45,7 +42,6 @@ func processHTTPStrmPlaybackInfo(jsonChain *utils.JsonChain, bsePath string, ite
 	}
 
 	if directStreamURL != nil {
-		// 日志中脱敏 api_key，避免密钥落盘
 		msgs = append(msgs, fmt.Sprintf("原直链播放链接: %s", utils.MaskSensitiveURL(*directStreamURL)))
 		apikeypair, err := utils.ResolveEmbyAPIKVPairs(directStreamURL)
 		if err != nil {

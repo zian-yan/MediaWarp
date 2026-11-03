@@ -6,7 +6,6 @@ import (
 	"github.com/AkimioJR/MediaWarp/utils"
 )
 
-// 日志脱敏：敏感查询参数的值必须被替换，其他参数保持原样
 func TestMaskSensitiveQuery(t *testing.T) {
 	cases := map[string]struct {
 		in   string
@@ -30,7 +29,6 @@ func TestMaskSensitiveQuery(t *testing.T) {
 	}
 }
 
-// 完整 URL 脱敏：只处理查询串，路径与 fragment 保持不变
 func TestMaskSensitiveURL(t *testing.T) {
 	cases := map[string]struct {
 		in   string
@@ -63,7 +61,6 @@ func TestMaskSensitiveURL(t *testing.T) {
 	}
 }
 
-// 302 目标只允许 http/https
 func TestIsSafeRedirectURL(t *testing.T) {
 	cases := map[string]struct {
 		in   string

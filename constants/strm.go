@@ -1,6 +1,6 @@
 package constants
 
-type StrmFileType uint8 // Strm 文件类型
+type StrmFileType uint8
 
 const (
 	UnknownStrm StrmFileType = iota

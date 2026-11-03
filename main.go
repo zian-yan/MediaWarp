@@ -26,9 +26,9 @@ import (
 )
 
 var (
-	isDebug     bool   // 开启调试模式
-	showVersion bool   // 显示版本信息
-	configPath  string // 配置文件路径
+	isDebug     bool
+	showVersion bool
+	configPath  string
 )
 
 func init() {
@@ -63,29 +63,27 @@ func main() {
 
 	logging.Info("正在加载配置文件: ", configPath)
 
-	if err := config.Init(configPath); err != nil { // 初始化配置，配置只在启动时读取
+	if err := config.Init(configPath); err != nil {
 		panic("配置初始化失败: " + err.Error())
 	}
 
-	logging.Init()                                                                           // 初始化日志
-	logging.Infof("上游媒体服务器类型：%s，服务器地址：%s", config.MediaServer.Type, config.MediaServer.ADDR) // 日志打印
+	logging.Init()
+	logging.Infof("上游媒体服务器类型：%s，服务器地址：%s", config.MediaServer.Type, config.MediaServer.ADDR)
 	logConfigState()
 
-	if err := handler.Init(); err != nil { // 初始化媒体服务器处理器
+	if err := handler.Init(); err != nil {
 		panic("媒体服务器处理器初始化失败: " + err.Error())
 	}
 
-	ginR := router.InitRouter() // 路由初始化
+	ginR := router.InitRouter()
 
-	// 先显式监听，端口不可用时立刻给出明确原因，而不是异步失败
 	ln, err := net.Listen("tcp", ":"+strconv.Itoa(int(config.Port)))
 	if err != nil {
 		panic(fmt.Sprintf("端口 %d 无法监听: %v", config.Port, err))
 	}
 
 	srv := &http.Server{
-		Handler: ginR,
-		// 防止 Slowloris 慢速攻击耗尽连接；流媒体是长连接，不设置 ReadTimeout/WriteTimeout
+		Handler:           ginR,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
@@ -110,9 +108,6 @@ func main() {
 	}
 }
 
-// 打印启动时的关键配置状态
-//
-// 配置只在启动时生效，这些提示能帮助定位「改了配置文件却没生效」的问题
 func logConfigState() {
 	if config.HTTPStrm.Enable && len(config.HTTPStrm.PrefixList) == 0 {
 		logging.Warning("http_strm.enable 为 true 但 http_strm.prefix_list 为空，302 重定向不会命中任何 Strm 文件")

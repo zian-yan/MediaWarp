@@ -7,13 +7,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type MediaServerType uint8 // 媒体服务器类型
+type MediaServerType uint8
 
 var InvalidMediaServerErr = errors.New("invalid  MediaServerType")
 
 const (
-	EMBY     MediaServerType = iota // 媒体服务器类型：EmbyServer
-	JELLYFIN                        // 媒体服务器类型：Jellyfin
+	EMBY MediaServerType = iota
+	JELLYFIN
 )
 
 func (m MediaServerType) str() (string, error) {

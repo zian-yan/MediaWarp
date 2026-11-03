@@ -14,30 +14,22 @@ import (
 
 type Client struct {
 	baseURL *url.URL
-	apiKey  string // 认证方式：APIKey；获取方式：Emby控制台 -> 高级 -> API密钥
+	apiKey  string
 	client  *http.Client
 }
 
-// 获取媒体服务器类型
 func (client *Client) GetType() constants.MediaServerType {
 	return constants.EMBY
 }
 
-// 获取Emby连接地址
-//
-// 包含协议、服务器域名（IP）、端口号
-// 示例：return "http://emby.example.com:8096"
 func (client *Client) GetBaseURLString() string {
 	return client.baseURL.String()
 }
 
-// 获取Emby的API Key
 func (client *Client) GetAPIKey() string {
 	return client.apiKey
 }
 
-// ItemsService
-// /Items
 func (client *Client) ItemsServiceQueryItem(ids string, limit int, fields string) (*EmbyResponse, error) {
 	var (
 		params       = url.Values{}
@@ -68,7 +60,6 @@ func (client *Client) ItemsServiceQueryItem(ids string, limit int, fields string
 	return itemResponse, nil
 }
 
-// 获取Emby实例
 func New(baseURL string, apiKey string) (*Client, error) {
 	parsedURL, err := url.Parse(baseURL)
 	if err != nil {

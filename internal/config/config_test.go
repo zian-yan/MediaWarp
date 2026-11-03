@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// 写入临时配置文件并加载，返回错误
 func loadFromString(t *testing.T, content string) error {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -87,7 +86,6 @@ func TestLoadConfigValid(t *testing.T) {
 	}
 }
 
-// 旧配置里残留的 web 段应被忽略，不影响启动
 func TestLoadConfigIgnoresLegacyWebSection(t *testing.T) {
 	resetConfig(t)
 
@@ -128,7 +126,6 @@ func TestLoadConfigInvalid(t *testing.T) {
 	}
 }
 
-// 未知的媒体服务器类型应在解析阶段失败
 func TestLoadConfigUnknownServerType(t *testing.T) {
 	resetConfig(t)
 

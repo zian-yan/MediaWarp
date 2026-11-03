@@ -16,7 +16,6 @@ func newTestCache(maxBytes, maxEntryBytes int64, ttl time.Duration, now *time.Ti
 	})
 }
 
-// 预算不足时按 LRU 淘汰，且总量不超预算
 func TestSetEvictsLRU(t *testing.T) {
 	now := time.Now()
 	c := newTestCache(100, 60, time.Minute, &now)
@@ -24,7 +23,7 @@ func TestSetEvictsLRU(t *testing.T) {
 	if !c.Set("a", strings.Repeat("a", 40)) || !c.Set("b", strings.Repeat("b", 40)) {
 		t.Fatal("写入应成功")
 	}
-	if _, ok := c.Get("a"); !ok { // a 变成最近使用，下一个被淘汰的应是 b
+	if _, ok := c.Get("a"); !ok {
 		t.Fatal("a 应命中")
 	}
 	if !c.Set("c", strings.Repeat("c", 40)) {
@@ -45,7 +44,6 @@ func TestSetEvictsLRU(t *testing.T) {
 	}
 }
 
-// 超过单条上限的条目直接拒绝，不影响已有条目
 func TestSetRejectsOversizeEntry(t *testing.T) {
 	now := time.Now()
 	c := newTestCache(100, 32, time.Minute, &now)
@@ -61,7 +59,6 @@ func TestSetRejectsOversizeEntry(t *testing.T) {
 	}
 }
 
-// 单条大于总预算时拒绝写入（避免一条巨物清空整个池）
 func TestSetRejectsEntryLargerThanBudget(t *testing.T) {
 	now := time.Now()
 	c := newTestCache(16, 0, time.Minute, &now)
@@ -70,7 +67,6 @@ func TestSetRejectsEntryLargerThanBudget(t *testing.T) {
 	}
 }
 
-// 过期条目在读取时回收
 func TestGetExpired(t *testing.T) {
 	now := time.Now()
 	c := newTestCache(100, 0, time.Minute, &now)
@@ -92,7 +88,6 @@ func TestGetExpired(t *testing.T) {
 	}
 }
 
-// TTL <= 0 表示不过期
 func TestNoTTL(t *testing.T) {
 	now := time.Now()
 	c := newTestCache(100, 0, 0, &now)
@@ -104,7 +99,6 @@ func TestNoTTL(t *testing.T) {
 	}
 }
 
-// 覆盖写入按新值重新计费
 func TestOverwriteAccounting(t *testing.T) {
 	now := time.Now()
 	c := newTestCache(1000, 0, time.Minute, &now)

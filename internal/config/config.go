@@ -24,34 +24,30 @@ var (
 		Arch:       runtime.GOARCH,
 	}
 
-	Port         uint16              // MediaWarp 监听端口
-	MediaServer  MediaServerSetting  // 上游媒体服务器设置
-	Logger       LoggerSetting       // 日志设置
-	Cache        CacheSetting        // 缓存设置
-	ClientFilter ClientFilterSetting // 客户端过滤设置
-	HTTPStrm     HTTPStrmSetting     // HTTPSTRM设置
+	Port         uint16
+	MediaServer  MediaServerSetting
+	Logger       LoggerSetting
+	Cache        CacheSetting
+	ClientFilter ClientFilterSetting
+	HTTPStrm     HTTPStrmSetting
 
-	configFilePath string // 启动时实际使用的配置文件路径（--config 可覆盖）
+	configFilePath string
 )
 
 var ErrInvalidPort = errors.New("端口必须是 1-65535 之间的整数")
 
-// 获取版本信息
 func Version() *VersionInfo {
 	return &version
 }
 
-// 配置文件目录
 func ConfigDir() string {
 	return "config"
 }
 
-// 配置文件路径（默认值，除非通过 --config 指定）
 func ConfigPath() string {
 	return filepath.Join(ConfigDir(), "config.yaml")
 }
 
-// 当前实际使用的配置文件路径
 func ConfigFilePath() string {
 	if configFilePath != "" {
 		return configFilePath
@@ -59,36 +55,22 @@ func ConfigFilePath() string {
 	return ConfigPath()
 }
 
-// 获取日志目录
-//
-// 总日志目录
-// ./logs
 func LogDir() string {
 	return "logs"
 }
 
-// 获取日志目录
-//
-// 带有日期
-// ./logs/2024-9-29
 func LogDirWithDate() string {
 	return filepath.Join(LogDir(), time.Now().Format("2006-1-2"))
 }
 
-// 访问日志文件路径
 func AccessLogPath() string {
 	return filepath.Join(LogDirWithDate(), "access.log")
 }
 
-// 服务日志文件路径
 func ServiceLogPath() string {
 	return filepath.Join(LogDirWithDate(), "service.log")
 }
 
-// 初始化配置
-//
-// 配置只在启动时从配置文件加载一次，运行期不再回写；
-// 修改配置需要编辑配置文件并重启进程
 func Init(path string) error {
 	configFilePath = path
 	if err := loadConfig(path); err != nil {
@@ -100,7 +82,6 @@ func Init(path string) error {
 	return nil
 }
 
-// 读取并解析配置文件
 func loadConfig(path string) error {
 	var s Setting
 	data, err := os.ReadFile(path)
@@ -121,10 +102,6 @@ func loadConfig(path string) error {
 	return validate()
 }
 
-// 校验当前配置是否可用
-//
-// 只校验「配错就一定跑不起来」的项，其余保持宽松：
-// 缓存 TTL ≤ 0 表示关闭该项缓存，属于合法配置
 func validate() error {
 	if Port < 1 || Port > 65535 {
 		return fmt.Errorf("%w，当前值: %d", ErrInvalidPort, Port)
@@ -147,7 +124,6 @@ func validate() error {
 	return nil
 }
 
-// 校验上游媒体服务器地址
 func validateAddr(addr string) error {
 	if addr == "" {
 		return errors.New("server.addr 不能为空")
@@ -165,9 +141,6 @@ func validateAddr(addr string) error {
 	return nil
 }
 
-// 创建文件夹
-//
-// 含 API 密钥的配置目录与日志目录都收紧到 0750，避免同机其他用户读取
 func createDir() error {
 	if err := os.MkdirAll(ConfigDir(), 0o750); err != nil {
 		return fmt.Errorf("创建配置文件夹失败: %v", err)

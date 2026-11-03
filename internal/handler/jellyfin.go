@@ -21,11 +21,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Jellyfin 服务器处理器
 type JellyfinHandler struct {
-	client          *jellyfin.Client       // Jellyfin 客户端
-	routerRules     []RegexpRouteRule      // 正则路由规则
-	proxy           *httputil.ReverseProxy // 反向代理
+	client          *jellyfin.Client
+	routerRules     []RegexpRouteRule
+	proxy           *httputil.ReverseProxy
 	httpStrmHandler StrmHandlerFunc
 }
 
@@ -42,7 +41,7 @@ func NewJellyfinHandler(addr string, apiKey string) (*JellyfinHandler, error) {
 	}
 	handler.proxy = newSingleHostRewriteProxy(target)
 
-	{ // 初始化路由规则
+	{
 		handler.routerRules = []RegexpRouteRule{
 			{
 				Regexp: constants.JellyfinRegexp.Router.ModifyPlaybackInfo,
@@ -65,12 +64,10 @@ func NewJellyfinHandler(addr string, apiKey string) (*JellyfinHandler, error) {
 	return &handler, nil
 }
 
-// 转发请求至上游服务器
 func (handler *JellyfinHandler) ReverseProxy(rw http.ResponseWriter, req *http.Request) {
 	handler.proxy.ServeHTTP(rw, req)
 }
 
-// 正则路由表
 func (handler *JellyfinHandler) GetRegexpRouteRules() []RegexpRouteRule {
 	return handler.routerRules
 }
@@ -83,10 +80,6 @@ func (*JellyfinHandler) GetSubtitleCacheRegexp() *regexp.Regexp {
 	return constants.JellyfinRegexp.Cache.Subtitle
 }
 
-// 修改播放信息请求
-//
-// /Items/:itemId
-// 强制将 HTTPStrm 设置为支持直链播放，未开启 proxy 时禁用转码
 func (handler *JellyfinHandler) ModifyPlaybackInfo(rw *http.Response) error {
 	startTime := time.Now()
 	defer func() {
@@ -115,7 +108,7 @@ func (handler *JellyfinHandler) ModifyPlaybackInfo(rw *http.Response) error {
 		}
 		startTime := time.Now()
 		logging.Debug("请求 ItemsServiceQueryItem：" + *mediasource.ID)
-		itemResponse, err := handler.client.ItemsServiceQueryItem(*mediasource.ID, 1, "Path,MediaSources") // 查询 item 需要去除前缀仅保留数字部分
+		itemResponse, err := handler.client.ItemsServiceQueryItem(*mediasource.ID, 1, "Path,MediaSources")
 		if err != nil {
 			logging.Warning("请求 ItemsServiceQueryItem 失败：", err)
 			continue
@@ -151,17 +144,14 @@ func (handler *JellyfinHandler) ModifyPlaybackInfo(rw *http.Response) error {
 		return err
 	}
 
-	rw.Header.Set("Content-Type", "application/json") // 更新 Content-Type 头
+	rw.Header.Set("Content-Type", "application/json")
 	rw.Header.Set("Content-Length", strconv.Itoa(len(data)))
 	rw.Body = io.NopCloser(bytes.NewReader(data))
 	return nil
 }
 
-// 视频流处理器
-//
-// 支持播放本地视频、重定向 HTTPStrm
 func (handler *JellyfinHandler) VideosHandler(ctx *gin.Context) {
-	if ctx.Request.Method == http.MethodHead { // 不额外处理 HEAD 请求
+	if ctx.Request.Method == http.MethodHead {
 		handler.ReverseProxy(ctx.Writer, ctx.Request)
 		logging.Debug("VideosHandler 不处理 HEAD 请求，转发至上游服务器")
 		return
@@ -169,7 +159,7 @@ func (handler *JellyfinHandler) VideosHandler(ctx *gin.Context) {
 
 	mediaSourceID := ctx.Query("mediasourceid")
 	logging.Debugf("请求 ItemsServiceQueryItem：%s", mediaSourceID)
-	itemResponse, err := handler.client.ItemsServiceQueryItem(mediaSourceID, 1, "Path,MediaSources") // 查询 item 需要去除前缀仅保留数字部分
+	itemResponse, err := handler.client.ItemsServiceQueryItem(mediaSourceID, 1, "Path,MediaSources")
 	if err != nil {
 		logging.Warning("请求 ItemsServiceQueryItem 失败：", err)
 		handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
@@ -184,13 +174,13 @@ func (handler *JellyfinHandler) VideosHandler(ctx *gin.Context) {
 
 	item := itemResponse.Items[0]
 
-	if item.Path == nil || !strings.HasSuffix(strings.ToLower(*item.Path), ".strm") { // 不是 Strm 文件
+	if item.Path == nil || !strings.HasSuffix(strings.ToLower(*item.Path), ".strm") {
 		logging.Debugf("播放本地视频，不进行处理")
 		handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
 		return
 	}
 
-	if !matchHTTPStrmPath(*item.Path) { // 不是 HTTPStrm
+	if !matchHTTPStrmPath(*item.Path) {
 		handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
 		return
 	}
@@ -208,7 +198,7 @@ func (handler *JellyfinHandler) VideosHandler(ctx *gin.Context) {
 		}
 		if mediasource.Protocol != nil && *mediasource.Protocol == jellyfin.HTTP {
 			target := handler.httpStrmHandler(*mediasource.Path, ctx.Request.UserAgent())
-			if !utils.IsSafeRedirectURL(target) { // 只允许 http/https 跳转
+			if !utils.IsSafeRedirectURL(target) {
 				logging.Warningf("HTTPStrm 重定向目标协议不合法，转回上游：%s", utils.MaskSensitiveURL(target))
 				handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
 				return
@@ -220,8 +210,7 @@ func (handler *JellyfinHandler) VideosHandler(ctx *gin.Context) {
 		break
 	}
 
-	// 未产生 302 重定向，回退到上游服务器
 	handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
 }
 
-var _ MediaServerHandler = (*JellyfinHandler)(nil) // 确保 JellyfinHandler 实现 MediaServerHandler 接口
+var _ MediaServerHandler = (*JellyfinHandler)(nil)
