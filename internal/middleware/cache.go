@@ -1,19 +1,16 @@
 package middleware
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"regexp"
 	"sort"
 	"time"
 
+	"github.com/AkimioJR/MediaWarp/internal/cache"
 	"github.com/AkimioJR/MediaWarp/internal/logging"
 	"github.com/AkimioJR/MediaWarp/utils"
 
-	"github.com/allegro/bigcache/v3"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,10 +18,6 @@ type CacheData struct {
 	StatusCode int         // code 响应码
 	Header     http.Header // header 响应头信息
 	Body       []byte      // body 响应体
-}
-
-func (c *CacheData) Json() ([]byte, error) {
-	return json.Marshal(c)
 }
 
 func (c *CacheData) WriteResponse(ctx *gin.Context) {
@@ -37,34 +30,47 @@ func (c *CacheData) WriteResponse(ctx *gin.Context) {
 	ctx.Writer.Write(c.Body) // 设置响应体
 }
 
-func ParseCacheData(data []byte) (*CacheData, error) {
-	var cacheData CacheData
-	if err := json.Unmarshal(data, &cacheData); err != nil {
-		return nil, err
+// cacheDataSize 计算一条缓存记录的真实占用（响应体 + 响应头 + 结构体开销）
+func cacheDataSize(c *CacheData) int64 {
+	if c == nil {
+		return 0
 	}
-	return &cacheData, nil
+	size := int64(len(c.Body)) + 96
+	for key, values := range c.Header {
+		size += int64(len(key)) + 16
+		for _, value := range values {
+			size += int64(len(value)) + 16
+		}
+	}
+	return size
 }
 
-// maxCacheableBodySize 单个缓存条目的响应体上限
-//
-// 超过该大小的响应照常转发给客户端，但不写入缓存，
-// 避免大文件把内存缓冲撑爆
-const maxCacheableBodySize = 8 << 20 // 8 MiB
+const (
+	// maxCacheableBodySize 单个缓存条目的响应体上限，也决定单请求的内存缓冲上限
+	//
+	// 超过该大小的响应照常转发给客户端，但不写入缓存
+	maxCacheableBodySize = 4 << 20 // 4 MiB
+
+	// maxCacheBytes 单个缓存池的总字节预算
+	//
+	// 超出预算时按 LRU 淘汰，缓存内存因此有确定上界
+	maxCacheBytes = 32 << 20 // 32 MiB
+)
 
 // 自定义的请求响应器
 //
 // 用于记录缓存数据
 type WriterWarp struct {
 	gin.ResponseWriter
-	Body     bytes.Buffer
+	Body     []byte
 	overflow bool // 响应体超过 maxCacheableBodySize，放弃缓存
 }
 
 var _ gin.ResponseWriter = (*WriterWarp)(nil)
 
 func (w *WriterWarp) Write(data []byte) (int, error) {
-	if w.Body.Len()+len(data) <= maxCacheableBodySize {
-		w.Body.Write(data)
+	if len(w.Body)+len(data) <= maxCacheableBodySize {
+		w.Body = append(w.Body, data...)
 	} else {
 		w.overflow = true
 	}
@@ -89,40 +95,6 @@ var CacheKeyIgnoreQuery = []string{
 	"playsessionid",
 	"tag", // 忽略 ImageTag 参数，防止 Emby 重启后缓存失效
 }
-
-// 计算Key时忽略的请求头
-// var cacheKeyIgnoreHeaders = []string{
-// 	"Range",
-// 	"Host",
-// 	"Referrer",
-// 	"Connection",
-// 	"Accept",
-// 	"Accept-Encoding",
-// 	"Accept-Language",
-// 	"Cache-Control",
-// 	"Upgrade-Insecure-Requests",
-// 	"Referer",
-// 	"Origin",
-
-// 	// StreamMusic
-// 	"X-Streammusic-Audioid",
-// 	"X-Streammusic-Savepath",
-
-// 	// IP
-// 	"X-Forwarded-For",
-// 	"X-Real-IP",
-// 	"Forwarded",
-// 	"Client-IP",
-// 	"True-Client-IP",
-// 	"CF-Connecting-IP",
-// 	"X-Cluster-Client-IP",
-// 	"Fastly-Client-IP",
-// 	"X-Client-IP",
-// 	"X-ProxyUser-IP",
-// 	"Via",
-// 	"Forwarded-For",
-// 	"X-From-Cdn",
-// }
 
 func getCacheKey(ctx *gin.Context) string {
 	var (
@@ -171,43 +143,39 @@ func NewCache(name string, reg *regexp.Regexp, ttl time.Duration) gin.HandlerFun
 		return func(ctx *gin.Context) { ctx.Next() }
 	}
 
-	cacheConfig := bigcache.DefaultConfig(ttl)
-	cacheConfig.HardMaxCacheSize = 256 // 缓存池内存上限（MB），防止长期运行无限增长
-	cachePool, err := bigcache.New(context.Background(), cacheConfig)
-	if err != nil {
-		logging.Warningf("创建 %s 缓存失败: %v", name, err)
-		return func(ctx *gin.Context) { ctx.Next() }
-	}
-	logging.Infof("%s缓存已启用, TTL: %s", name, ttl)
+	pool := cache.New[*CacheData](cache.Config[*CacheData]{
+		TTL:           ttl,
+		MaxBytes:      maxCacheBytes,
+		MaxEntryBytes: maxCacheableBodySize,
+		SizeOf:        cacheDataSize,
+	})
+	logging.Infof("%s缓存已启用, TTL: %s, 上限: %d MiB", name, ttl, maxCacheBytes>>20)
 
 	return func(ctx *gin.Context) {
 		if ctx.Request.Method != http.MethodGet || !reg.MatchString(ctx.Request.URL.Path) {
 			ctx.Next()
 			return
 		}
-		cacheFunc(ctx, cachePool, name, reg.String())
+		cacheFunc(ctx, pool, name, reg.String())
 	}
 }
 
-func cacheFunc(ctx *gin.Context, cachePool *bigcache.BigCache, cacheName string, reg string) {
+func cacheFunc(ctx *gin.Context, pool *cache.Cache[*CacheData], cacheName string, reg string) {
 	cacheKey := getCacheKey(ctx)
 	logging.AccessDebugf(ctx, "命中 %s 缓存正则表达式: %s, CacheKey: %s", cacheName, reg, cacheKey)
-	if cacheByte, err := cachePool.Get(cacheKey); err == nil {
-		if cacheData, err := ParseCacheData(cacheByte); err == nil {
-			logging.AccessDebugf(ctx, "命中 %s 缓存: %s", cacheName, cacheKey)
-			cacheData.WriteResponse(ctx)
-			ctx.Abort()
-			return
-		} else {
-			logging.AccessWarningf(ctx, "解析 %s 缓存失败: %v", cacheName, err)
-		}
+	if cacheData, ok := pool.Get(cacheKey); ok {
+		logging.AccessDebugf(ctx, "命中 %s 缓存: %s", cacheName, cacheKey)
+		cacheData.WriteResponse(ctx)
+		ctx.Abort()
+		return
 	}
 
-	writer := &WriterWarp{
-		ResponseWriter: ctx.Writer,
-		Body:           bytes.Buffer{},
-	}
+	origin := ctx.Writer
+	writer := &WriterWarp{ResponseWriter: origin}
 	ctx.Writer = writer
+	// 还原 ResponseWriter：gin 的 Context 会回到池中复用，
+	// 留着包装器会让响应缓冲被池长期持有（每个最多 maxCacheableBodySize）
+	defer func() { ctx.Writer = origin }()
 
 	ctx.Next() // 处理请求
 
@@ -216,23 +184,21 @@ func cacheFunc(ctx *gin.Context, cachePool *bigcache.BigCache, cacheName string,
 		return
 	}
 
-	code := ctx.Writer.Status()
-	if code >= http.StatusOK && code < http.StatusMultipleChoices { // 响应是2xx的成功响应，更新缓存记录
-		cacheData := &CacheData{ // 创建缓存数据
-			StatusCode: code, //ctx.Request.Response.StatusCode,
-			Header:     ctx.Writer.Header().Clone(),
-			Body:       writer.Body.Bytes(),
-		}
-
-		if cacheByte, err := cacheData.Json(); err == nil {
-			err = cachePool.Set(cacheKey, cacheByte)
-			if err != nil {
-				logging.AccessWarningf(ctx, "写入 %s 缓存失败: %v", cacheName, err)
-			} else {
-				logging.AccessDebugf(ctx, "写入 %s 缓存成功", cacheName)
-			}
-		}
-	} else {
+	code := writer.Status()
+	if code < http.StatusOK || code >= http.StatusMultipleChoices { // 仅缓存 2xx
 		logging.AccessDebugf(ctx, "响应码为: %d, 不进行 %s 缓存", code, cacheName)
+		return
 	}
+
+	cacheData := &CacheData{
+		StatusCode: code,
+		Header:     writer.Header().Clone(),
+		// 精确拷贝：缓冲切片往往有 2 倍冗余容量，直接复用会把冗余一起留在缓存里
+		Body: append([]byte(nil), writer.Body...),
+	}
+	if !pool.Set(cacheKey, cacheData) {
+		logging.AccessDebugf(ctx, "响应体超过单条上限，不进行 %s 缓存", cacheName)
+		return
+	}
+	logging.AccessDebugf(ctx, "写入 %s 缓存成功: %s", cacheName, cacheKey)
 }

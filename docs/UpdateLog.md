@@ -197,3 +197,8 @@
   - 稳定：HTTP Server 增加 ReadHeaderTimeout / IdleTimeout，缓解 Slowloris 慢速请求攻击
   - 稳定：缓存单条上限 8MiB，图片/字幕缓存池上限 256MB，HTTPStrm 缓存池上限 64MB，避免内存无上限增长
   - 其他：Recovery 不再向客户端回显 panic 详情；重定向次数上限修正为 10 次；响应体关闭前排空以复用连接
+- 2026.11.3: v1.0.1
+  - 修复内存持续增长：缓存改用自研有界 LRU+TTL（`internal/cache`），移除 bigcache 依赖
+  - 启动内存由 ~550MB 降至 ~6MB，图片/字幕各限 32MiB、HTTPStrm 8MiB、单条 4MiB，可回收
+  - 缓存体不再走 JSON/base64 编码，并修复缓存中间件替换 ResponseWriter 后未还原的问题
+  - 修复日志文件句柄每日重开、并发写无锁的问题

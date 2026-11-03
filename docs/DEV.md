@@ -86,6 +86,28 @@ MEDIAWARP
 
 `docker/Dockerfile` 是源码构建版（多阶段，`golang` 构建 + `alpine` 运行），供本地构建与 CI 校验使用；CI 的 `docker-build` 作业只构建不推送。
 
+## Release 正文（changelog）的版本区间
+
+`release.yaml` 的 `Generate Release Body` 只调用 `scripts/changelog.sh <tag>`，区间界定规则按优先级：
+
+1. 显式基线：仓库变量 `CHANGELOG_BASE`（或脚本第 2 个参数），区间为 `BASE..TAG`
+2. 自动：`git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' 'TAG^'`，即当前 tag 之前最近的版本 tag
+3. 兜底：所有版本 tag 中「是当前 tag 祖先、且提交时间最近」的那个
+4. 都没有：判定为首个版本，**只写说明、不列任何提交**（不再回退成 `git log HEAD` 全量历史）
+
+注意第 2 条不能用 `git tag --sort=-v:refname` 取版本号最大的 tag：维护分支上的 tag 版本号可能更大但与本次发布线无关，会把已发布内容重新算进本版本。脚本因此按提交拓扑取基线，并把「首个版本」与「区间为空」分别输出明确文案。
+
+脚本依赖完整历史与 tag，`actions/checkout` 必须保持 `fetch-depth: 0`；tag 解析失败时脚本以退出码 2 直接失败，避免发出区间错误的正文。
+
+本地验证：
+
+```bash
+bash scripts/changelog.sh v1.0.0     # 预览某个 tag 的 release 正文
+bash scripts/changelog_selftest.sh   # 区间界定自测（在临时仓库里造历史，不动当前仓库）
+```
+
+首个版本（仓库里没有更早的版本 tag）生成的正文只有一句说明和提交列表链接。若首版内容较多，可人工补一段「### 本版本要点」——要点从 `docs/UpdateLog.md` 对应版本条目摘取，放在「完整更新记录」之前，然后手动更新该 release。这只针对首版，之后有基线就只由脚本产出，不再人工改动正文。
+
 # 本地构建
 
 ## 编译二进制

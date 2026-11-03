@@ -1,15 +1,12 @@
 package handler
 
 import (
-	"context"
-	"fmt"
 	"net/http"
 
+	"github.com/AkimioJR/MediaWarp/internal/cache"
 	"github.com/AkimioJR/MediaWarp/internal/config"
 	"github.com/AkimioJR/MediaWarp/internal/logging"
 	"github.com/AkimioJR/MediaWarp/utils"
-
-	"github.com/allegro/bigcache/v3"
 )
 
 // HTTPStrm 处理器
@@ -17,17 +14,22 @@ import (
 // 输入 Strm 文件内容（HTTP 链接），输出用于 302 重定向的链接
 type StrmHandlerFunc func(content string, ua string) string
 
+// 重定向结果缓存：键是 strm 内容，值是最终 URL
+const (
+	strmCacheMaxBytes      = 8 << 20 // 8 MiB 总预算
+	strmCacheMaxEntryBytes = 8 << 10 // 单条上限 8 KiB
+)
+
 func getHTTPStrmHandler() (StrmHandlerFunc, error) {
-	var cache *bigcache.BigCache
+	var urlCache *cache.Cache[string]
 	if config.Cache.Enable && config.Cache.HTTPStrmTTL > 0 && config.HTTPStrm.FinalURL {
-		cacheConfig := bigcache.DefaultConfig(config.Cache.HTTPStrmTTL)
-		cacheConfig.HardMaxCacheSize = 64 // 重定向结果缓存内存上限（MB）
-		var err error
-		cache, err = bigcache.New(context.Background(), cacheConfig)
-		if err != nil {
-			return nil, fmt.Errorf("创建 HTTPStrm 缓存失败: %w", err)
-		}
-		logging.Info("启用 HTTPStrm 缓存，TTL: ", config.Cache.HTTPStrmTTL)
+		urlCache = cache.New[string](cache.Config[string]{
+			TTL:           config.Cache.HTTPStrmTTL,
+			MaxBytes:      strmCacheMaxBytes,
+			MaxEntryBytes: strmCacheMaxEntryBytes,
+			SizeOf:        func(v string) int64 { return int64(len(v)) + 256 }, // 加上键的粗略开销
+		})
+		logging.Infof("启用 HTTPStrm 缓存，TTL: %s, 上限: %d MiB", config.Cache.HTTPStrmTTL, strmCacheMaxBytes>>20)
 	}
 
 	client := &http.Client{ // 创建自定义HTTP客户端配置
@@ -44,10 +46,10 @@ func getHTTPStrmHandler() (StrmHandlerFunc, error) {
 			return content
 		}
 
-		if cache != nil {
-			if cachedURL, err := cache.Get(content); err == nil {
-				logging.Infof("HTTPStrm 重定向至: %s (缓存)", utils.MaskSensitiveURL(string(cachedURL)))
-				return string(cachedURL)
+		if urlCache != nil {
+			if cachedURL, ok := urlCache.Get(content); ok {
+				logging.Infof("HTTPStrm 重定向至: %s (缓存)", utils.MaskSensitiveURL(cachedURL))
+				return cachedURL
 			}
 		}
 
@@ -59,12 +61,8 @@ func getHTTPStrmHandler() (StrmHandlerFunc, error) {
 		}
 
 		logging.Info("HTTPStrm 重定向至: ", utils.MaskSensitiveURL(finalURL))
-		if cache != nil {
-			if err := cache.Set(content, []byte(finalURL)); err != nil {
-				logging.Warning("缓存 HTTPStrm URL 失败: ", err)
-			} else {
-				logging.Debug("缓存 HTTPStrm URL 成功")
-			}
+		if urlCache != nil && !urlCache.Set(content, finalURL) {
+			logging.Debug("HTTPStrm URL 超过单条缓存上限，跳过缓存")
 		}
 		return finalURL
 	}, nil
