@@ -210,3 +210,8 @@
   - 新增 `cache.Cache.Stats()` 一致性快照，暴露命中、未命中、条目数与占用字节
   - 修复缓存写入时把 `X-Cache: MISS` 一并克隆进缓存、导致命中回放误报的问题
   - 清理全部 Go 源码注释
+- 2026.11.4: v1.1.1
+  - 修复过期缓存条目不释放：TTL 此前仅在读取时惰性判断，冷数据过期后无人访问会一直驻留内存；现由后台协程按分钟主动清理
+  - `internal/cache` 新增 `Config.SweepInterval`（大于 0 才启动清理协程）与 `ReleaseOS`，单次清理释放量达到阈值时调用 `debug.FreeOSMemory`，把页真正归还操作系统
+  - 新增 `Cache.PurgeExpired()` 与 `Cache.Close()`，图片 / 字幕 / HTTPStrm 三个缓存池均接入主动清理
+  - 镜像增加 `GOMEMLIMIT=192MiB` 软上限（须高于缓存池总量 112MiB，否则会陷入高频 GC），避免堆内存无界增长
