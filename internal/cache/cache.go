@@ -2,6 +2,7 @@ package cache
 
 import (
 	"container/list"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -12,7 +13,14 @@ type Config[V any] struct {
 	MaxEntryBytes int64
 	SizeOf        func(V) int64
 	Now           func() time.Time
+	SweepInterval time.Duration
+	ReleaseOS     bool
 }
+
+const (
+	minReleaseBytes = 8 << 20
+	maxReleaseBytes = 32 << 20
+)
 
 type cacheItem[V any] struct {
 	key    string
@@ -29,6 +37,9 @@ type Cache[V any] struct {
 	bytes  int64
 	hits   int64
 	misses int64
+
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 type Stats struct {
@@ -45,11 +56,51 @@ func New[V any](cfg Config[V]) *Cache[V] {
 	if cfg.SizeOf == nil {
 		cfg.SizeOf = func(V) int64 { return 0 }
 	}
-	return &Cache[V]{
+	c := &Cache[V]{
 		cfg:   cfg,
 		ll:    list.New(),
 		items: make(map[string]*list.Element),
 	}
+	if cfg.SweepInterval > 0 && cfg.TTL > 0 {
+		c.stop = make(chan struct{})
+		go c.janitor(cfg.SweepInterval)
+	}
+	return c
+}
+
+func (c *Cache[V]) janitor(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			freed := c.PurgeExpired()
+			if freed > 0 && c.cfg.ReleaseOS && freed >= c.releaseThreshold() {
+				debug.FreeOSMemory()
+			}
+		case <-c.stop:
+			return
+		}
+	}
+}
+
+func (c *Cache[V]) releaseThreshold() int64 {
+	threshold := c.cfg.MaxBytes / 8
+	if threshold < minReleaseBytes {
+		return minReleaseBytes
+	}
+	if threshold > maxReleaseBytes {
+		return maxReleaseBytes
+	}
+	return threshold
+}
+
+func (c *Cache[V]) Close() {
+	c.stopOnce.Do(func() {
+		if c.stop != nil {
+			close(c.stop)
+		}
+	})
 }
 
 func (c *Cache[V]) Get(key string) (V, bool) {
@@ -121,6 +172,22 @@ func (c *Cache[V]) Purge() {
 	c.ll.Init()
 	c.items = make(map[string]*list.Element)
 	c.bytes = 0
+}
+
+func (c *Cache[V]) PurgeExpired() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var freed int64
+	for el := c.ll.Back(); el != nil; {
+		prev := el.Prev()
+		if it := el.Value.(*cacheItem[V]); c.expired(it) {
+			freed += it.size
+			c.removeLocked(el)
+		}
+		el = prev
+	}
+	return freed
 }
 
 func (c *Cache[V]) Len() int {

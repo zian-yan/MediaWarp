@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/AkimioJR/MediaWarp/internal/cache"
 	"github.com/AkimioJR/MediaWarp/internal/config"
@@ -24,6 +25,8 @@ func getHTTPStrmHandler() (StrmHandlerFunc, error) {
 			MaxBytes:      strmCacheMaxBytes,
 			MaxEntryBytes: strmCacheMaxEntryBytes,
 			SizeOf:        func(v string) int64 { return int64(len(v)) + 256 },
+			SweepInterval: time.Minute,
+			ReleaseOS:     true,
 		})
 		logging.Infof("启用 HTTPStrm 缓存，TTL: %s, 上限: %d MiB", config.Cache.HTTPStrmTTL, strmCacheMaxBytes>>20)
 	}

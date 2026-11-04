@@ -54,6 +54,8 @@ const (
 	cacheHeader = "X-Cache"
 
 	statsLogInterval = 500
+
+	cacheSweepInterval = time.Minute
 )
 
 type WriterWarp struct {
@@ -134,6 +136,8 @@ func NewCache(name string, reg *regexp.Regexp, ttl time.Duration, poolBytes int6
 		MaxBytes:      poolBytes,
 		MaxEntryBytes: maxCacheableBodySize,
 		SizeOf:        cacheDataSize,
+		SweepInterval: cacheSweepInterval,
+		ReleaseOS:     true,
 	})
 	logging.Infof("%s缓存已启用, TTL: %s, 上限: %d MiB", name, ttl, poolBytes>>20)
 

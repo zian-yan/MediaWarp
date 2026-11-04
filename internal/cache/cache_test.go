@@ -130,3 +130,82 @@ func TestDeleteAndPurge(t *testing.T) {
 		t.Errorf("Purge 后 bytes=%d len=%d，期望 0/0", c.Bytes(), c.Len())
 	}
 }
+
+func TestPurgeExpiredKeepsFreshEntries(t *testing.T) {
+	now := time.Now()
+	c := newTestCache(1000, 0, time.Minute, &now)
+
+	c.Set("stale", strings.Repeat("x", 10))
+
+	now = now.Add(30 * time.Second)
+	c.Set("fresh", strings.Repeat("y", 20))
+
+	now = now.Add(45 * time.Second)
+
+	if freed := c.PurgeExpired(); freed != 10 {
+		t.Errorf("释放字节 = %d，期望 10", freed)
+	}
+	if c.Len() != 1 {
+		t.Errorf("条目数 = %d，期望 1", c.Len())
+	}
+	if c.Bytes() != 20 {
+		t.Errorf("占用 = %d，期望 20", c.Bytes())
+	}
+	if _, ok := c.Get("fresh"); !ok {
+		t.Error("未过期条目不应被清理")
+	}
+	if _, ok := c.Get("stale"); ok {
+		t.Error("过期条目应被清理")
+	}
+}
+
+func TestPurgeExpiredWithoutTTLIsNoop(t *testing.T) {
+	now := time.Now()
+	c := newTestCache(1000, 0, 0, &now)
+	c.Set("k", "v")
+
+	now = now.Add(24 * time.Hour)
+	if freed := c.PurgeExpired(); freed != 0 {
+		t.Errorf("无 TTL 时释放字节 = %d，期望 0", freed)
+	}
+	if c.Len() != 1 {
+		t.Errorf("无 TTL 时条目数 = %d，期望 1", c.Len())
+	}
+}
+
+func TestJanitorPurgesExpiredEntries(t *testing.T) {
+	c := New[string](Config[string]{
+		TTL:           40 * time.Millisecond,
+		MaxBytes:      1024,
+		SizeOf:        func(v string) int64 { return int64(len(v)) },
+		SweepInterval: 10 * time.Millisecond,
+	})
+	defer c.Close()
+
+	c.Set("k", "v")
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if c.Len() == 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("后台清理未移除过期条目")
+}
+
+func TestCloseIsIdempotent(t *testing.T) {
+	c := New[string](Config[string]{
+		TTL:           time.Minute,
+		MaxBytes:      1024,
+		SizeOf:        func(v string) int64 { return int64(len(v)) },
+		SweepInterval: time.Minute,
+	})
+
+	c.Close()
+	c.Close()
+	c.Set("k", "v")
+	if _, ok := c.Get("k"); !ok {
+		t.Error("Close 后缓存应仍可读写")
+	}
+}
