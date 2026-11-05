@@ -39,7 +39,11 @@ http_strm:                                  # HTTPStrm 相关配置（Strm 文�
   compatibility_mode: false                 # 兼容模式，开启后将使用更兼容但效率较低的方式获取最终 URL
   hide_embedded_subtitles: false            # 对命中前缀的 Strm 条目隐藏内嵌字幕流：PlaybackInfo 里不返回这些字幕流，且直接请求字幕流时返回 404，避免媒体服务器提取字幕时把远程文件整片下载；外挂字幕（同目录 .srt/.ass/.sup）不受影响
   hide_embedded_subtitles_clients: []       # 可选：只对匹配的客户端生效（按 User-Agent 包含关系匹配，忽略大小写），留空表示对所有客户端生效
-                                            # 网页播放的 UA 是浏览器 UA，要让 Web 也拦截需加入 "Mozilla"（或留空）；示例：["Polaris", "Mozilla"]
+                                            # 网页播放（Chrome / Safari / Edge / Firefox）UA 都以 Mozilla/5.0 开头，填 "Mozilla" 即可全覆盖
+                                            # 精准匹配：桌面 Chrome 用 "Chrome/"、iOS Chrome 用 "CriOS"、Safari 用 "Safari/605"
+                                            # 注意：不要只写 "Safari"，Chrome 的 UA 里也含 Safari/537.36，会连带拦掉 Chrome / Edge
+                                            # 实际 UA 可用 --debug 启动后看日志「客户端不在隐藏内嵌字幕名单中，User-Agent: ...」
+                                            # 示例：["Polaris", "Mozilla"]
   prefix_list:                              # 媒体服务器中 Strm 文件的前缀（符合该前缀的 Strm 文件且被正确识别为 HTTP 协议都会路由到该规则下）
     - /media/strm/http
     - /media/strm/https
