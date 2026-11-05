@@ -215,3 +215,9 @@
   - `internal/cache` 新增 `Config.SweepInterval`（大于 0 才启动清理协程）与 `ReleaseOS`，单次清理释放量达到阈值时调用 `debug.FreeOSMemory`，把页真正归还操作系统
   - 新增 `Cache.PurgeExpired()` 与 `Cache.Close()`，图片 / 字幕 / HTTPStrm 三个缓存池均接入主动清理
   - 镜像增加 `GOMEMLIMIT=192MiB` 软上限（须高于缓存池总量 112MiB，否则会陷入高频 GC），避免堆内存无界增长
+- 2026.11.5: v1.2.0
+  - 客户端过滤器：黑名单模式下空 `User-Agent` 不再被拦截（此前空 UA 与名单无关一律 403），白名单模式仍保持拒绝
+  - 过滤器拦截日志补充请求方法、路径与来源 IP，UA 以引号包裹输出，便于定位被拦请求
+  - 新增 `http_strm.hide_embedded_subtitles`：对命中 `prefix_list` 的 Strm 条目隐藏内嵌字幕流，避免媒体服务器提取字幕时把远程 HTTP 源整片下载（外挂字幕不受影响）
+  - 新增 `http_strm.hide_embedded_subtitles_clients`：按 User-Agent 包含关系（忽略大小写）限定生效客户端，留空表示全部客户端
+  - 移除 `docker/Dockerfile`、`docker/Dockerfile.ci` 与 `scripts/*.sh` 中的注释
