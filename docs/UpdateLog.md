@@ -221,3 +221,9 @@
   - 新增 `http_strm.hide_embedded_subtitles`：对命中 `prefix_list` 的 Strm 条目隐藏内嵌字幕流，避免媒体服务器提取字幕时把远程 HTTP 源整片下载（外挂字幕不受影响）
   - 新增 `http_strm.hide_embedded_subtitles_clients`：按 User-Agent 包含关系（忽略大小写）限定生效客户端，留空表示全部客户端
   - 移除 `docker/Dockerfile`、`docker/Dockerfile.ci` 与 `scripts/*.sh` 中的注释
+- 2026.11.5: v1.2.1
+  - 启动日志输出隐藏内嵌字幕的生效范围，例如 `隐藏内嵌字幕流已启用：仅对客户端 Polaris 生效（PlaybackInfo 隐藏 + 字幕请求拦截）`；`http_strm.enable` 为 false 或名单含空白项时给出警告
+  - 新增路由级拦截：命中 `prefix_list` 的 Strm 条目，客户端直接请求内嵌字幕流（`/Videos/{id}/{mediaSourceId}/Subtitles/{index}/...`）时返回 404，避免客户端绕过 PlaybackInfo 触发 ffmpeg 提取整片；外挂字幕、非 Strm 条目与查询失败均照常放行
+  - 字幕请求拦截复用 `hide_embedded_subtitles_clients` 的 User-Agent 名单，未命中名单的客户端不产生额外查询
+  - `config.yaml.example` 补充客户端 UA 填写说明：网页播放填 `Mozilla` 即覆盖 Chrome / Safari / Edge，并提示不要只写 `Safari`（Chrome 的 UA 也含 Safari/537.36）
+  - 补充单元测试：字幕路径解析、UA 匹配、内嵌拦截 / 外挂放行 / 名单外放行三条路由用例
