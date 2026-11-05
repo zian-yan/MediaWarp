@@ -44,6 +44,10 @@ func NewEmbyServerHandler(addr string, apiKey string) (*EmbyHandler, error) {
 	{
 		handler.routerRules = []RegexpRouteRule{
 			{
+				Regexp:  constants.EmbyRegexp.Router.SubtitleStream,
+				Handler: handler.SubtitlesHandler,
+			},
+			{
 				Regexp:  constants.EmbyRegexp.Router.VideosHandler,
 				Handler: handler.VideosHandler,
 			},
@@ -262,6 +266,55 @@ func (handler *EmbyHandler) VideosHandler(ctx *gin.Context) {
 	}
 
 	handler.ReverseProxy(ctx.Writer, ctx.Request)
+}
+
+func (handler *EmbyHandler) SubtitlesHandler(ctx *gin.Context) {
+	if !shouldHideEmbeddedSubtitlesFor(ctx.Request.UserAgent()) {
+		handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
+		return
+	}
+
+	itemID, index, ok := parseSubtitleStreamPath(constants.EmbyRegexp.Router.SubtitleStream, ctx.Request.URL.Path)
+	if !ok || !handler.blockEmbeddedSubtitle(itemID, index, ctx) {
+		handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
+	}
+}
+
+func (handler *EmbyHandler) blockEmbeddedSubtitle(itemID string, index int, ctx *gin.Context) bool {
+	itemResponse, err := handler.client.ItemsServiceQueryItem(itemID, 1, "Path,MediaSources")
+	if err != nil {
+		logging.Warning("请求 ItemsServiceQueryItem 失败：", err)
+		return false
+	}
+	if itemResponse == nil || len(itemResponse.Items) == 0 {
+		return false
+	}
+
+	item := itemResponse.Items[0]
+	if item.Path == nil || !matchHTTPStrmPath(*item.Path) {
+		return false
+	}
+
+	for _, mediasource := range item.MediaSources {
+		for _, stream := range mediasource.MediaStreams {
+			if stream.Index == nil || int(*stream.Index) != index {
+				continue
+			}
+			if stream.Type == nil || *stream.Type != emby.Subtitle {
+				continue
+			}
+			if stream.IsExternal != nil && *stream.IsExternal {
+				continue
+			}
+			if stream.DeliveryMethod != nil && *stream.DeliveryMethod == emby.External {
+				continue
+			}
+			logging.Infof("已拦截内嵌字幕请求：%s（客户端: %s）", ctx.Request.URL.Path, ctx.Request.UserAgent())
+			ctx.AbortWithStatus(http.StatusNotFound)
+			return true
+		}
+	}
+	return false
 }
 
 func (handler *EmbyHandler) ModifyBaseHtmlPlayer(rw *http.Response) error {

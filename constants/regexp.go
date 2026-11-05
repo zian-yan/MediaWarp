@@ -17,6 +17,7 @@ type RouterRegexps struct {
 	VideosHandler        *regexp.Regexp
 	ModifyBaseHtmlPlayer *regexp.Regexp
 	ModifyPlaybackInfo   *regexp.Regexp
+	SubtitleStream       *regexp.Regexp
 }
 
 type OthersRegexps struct {
@@ -28,6 +29,7 @@ var EmbyRegexp = &EmbyRegexps{
 		VideosHandler:        regexp.MustCompile(`(?i)^(/emby)?/Videos/\d+/(stream|original)(\.\w+)?$`),
 		ModifyBaseHtmlPlayer: regexp.MustCompile(`(?i)^/web/modules/htmlvideoplayer/basehtmlplayer.js$`),
 		ModifyPlaybackInfo:   regexp.MustCompile(`(?i)^(/emby)?/Items/\d+/PlaybackInfo$`),
+		SubtitleStream:       regexp.MustCompile(`(?i)^(?:/emby)?/Videos/(?P<item>[^/]+)/(?:[^/]+/)?Subtitles/(?P<index>\d+)/`),
 	},
 	Others: OthersRegexps{
 		VideoRedirectReg: regexp.MustCompile(`(?i)^(/emby)?/videos/(.*)/stream/(.*)`),
@@ -41,6 +43,7 @@ var EmbyRegexp = &EmbyRegexps{
 type JellyfinRouterRegexps struct {
 	VideosHandler      *regexp.Regexp
 	ModifyPlaybackInfo *regexp.Regexp
+	SubtitleStream     *regexp.Regexp
 }
 type JellyfinRegexps struct {
 	Router JellyfinRouterRegexps
@@ -51,6 +54,7 @@ var JellyfinRegexp = &JellyfinRegexps{
 	Router: JellyfinRouterRegexps{
 		VideosHandler:      regexp.MustCompile(`/Videos/[\w-]+/(stream|original)(\.\w+)?$`),
 		ModifyPlaybackInfo: regexp.MustCompile(`^/Items/\w+/PlaybackInfo$`),
+		SubtitleStream:     regexp.MustCompile(`(?i)^/Videos/(?P<item>[^/]+)/(?:[^/]+/)?Subtitles/(?P<index>\d+)/`),
 	},
 	Cache: CacheRegexps{
 		Image: regexp.MustCompile(`(?i)/Items/\w+/Images(/.*)?$`),

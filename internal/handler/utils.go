@@ -9,8 +9,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"reflect"
+	"regexp"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,22 +54,42 @@ func responseModifyCreater(rewrite func(*httputil.ProxyRequest), modifyResponseF
 }
 
 func shouldHideEmbeddedSubtitles(rw *http.Response) (bool, string) {
-	if !config.HTTPStrm.HideEmbeddedSubtitles {
-		return false, ""
-	}
 	var userAgent string
 	if rw != nil && rw.Request != nil {
 		userAgent = rw.Request.UserAgent()
 	}
+	return shouldHideEmbeddedSubtitlesFor(userAgent), userAgent
+}
+
+func shouldHideEmbeddedSubtitlesFor(userAgent string) bool {
+	if !config.HTTPStrm.HideEmbeddedSubtitles {
+		return false
+	}
 	clients := config.HTTPStrm.HideEmbeddedSubtitlesClients
 	if len(clients) == 0 {
-		return true, userAgent
+		return true
 	}
 	matched := matchUserAgent(userAgent, clients)
 	if !matched {
 		logging.Debug("客户端不在隐藏内嵌字幕名单中，User-Agent: ", userAgent)
 	}
-	return matched, userAgent
+	return matched
+}
+
+func parseSubtitleStreamPath(reg *regexp.Regexp, path string) (string, int, bool) {
+	matches := reg.FindStringSubmatch(path)
+	if matches == nil {
+		return "", 0, false
+	}
+	itemIdx, indexIdx := reg.SubexpIndex("item"), reg.SubexpIndex("index")
+	if itemIdx <= 0 || indexIdx <= 0 || itemIdx >= len(matches) || indexIdx >= len(matches) {
+		return "", 0, false
+	}
+	index, err := strconv.Atoi(matches[indexIdx])
+	if err != nil || matches[itemIdx] == "" {
+		return "", 0, false
+	}
+	return matches[itemIdx], index, true
 }
 
 func matchUserAgent(userAgent string, keywords []string) bool {

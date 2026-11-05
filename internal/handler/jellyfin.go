@@ -51,6 +51,10 @@ func NewJellyfinHandler(addr string, apiKey string) (*JellyfinHandler, error) {
 				),
 			},
 			{
+				Regexp:  constants.JellyfinRegexp.Router.SubtitleStream,
+				Handler: handler.SubtitlesHandler,
+			},
+			{
 				Regexp:  constants.JellyfinRegexp.Router.VideosHandler,
 				Handler: handler.VideosHandler,
 			},
@@ -78,6 +82,55 @@ func (handler *JellyfinHandler) GetImageCacheRegexp() *regexp.Regexp {
 
 func (*JellyfinHandler) GetSubtitleCacheRegexp() *regexp.Regexp {
 	return constants.JellyfinRegexp.Cache.Subtitle
+}
+
+func (handler *JellyfinHandler) SubtitlesHandler(ctx *gin.Context) {
+	if !shouldHideEmbeddedSubtitlesFor(ctx.Request.UserAgent()) {
+		handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
+		return
+	}
+
+	itemID, index, ok := parseSubtitleStreamPath(constants.JellyfinRegexp.Router.SubtitleStream, ctx.Request.URL.Path)
+	if !ok || !handler.blockEmbeddedSubtitle(itemID, index, ctx) {
+		handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)
+	}
+}
+
+func (handler *JellyfinHandler) blockEmbeddedSubtitle(itemID string, index int, ctx *gin.Context) bool {
+	itemResponse, err := handler.client.ItemsServiceQueryItem(itemID, 1, "Path,MediaSources")
+	if err != nil {
+		logging.Warning("请求 ItemsServiceQueryItem 失败：", err)
+		return false
+	}
+	if itemResponse == nil || len(itemResponse.Items) == 0 {
+		return false
+	}
+
+	item := itemResponse.Items[0]
+	if item.Path == nil || !matchHTTPStrmPath(*item.Path) {
+		return false
+	}
+
+	for _, mediasource := range item.MediaSources {
+		for _, stream := range mediasource.MediaStreams {
+			if stream.Index == nil || int(*stream.Index) != index {
+				continue
+			}
+			if stream.Type == nil || *stream.Type != jellyfin.Subtitle {
+				continue
+			}
+			if stream.IsExternal != nil && *stream.IsExternal {
+				continue
+			}
+			if stream.DeliveryMethod != nil && *stream.DeliveryMethod == jellyfin.External {
+				continue
+			}
+			logging.Infof("已拦截内嵌字幕请求：%s（客户端: %s）", ctx.Request.URL.Path, ctx.Request.UserAgent())
+			ctx.AbortWithStatus(http.StatusNotFound)
+			return true
+		}
+	}
+	return false
 }
 
 func (handler *JellyfinHandler) ModifyPlaybackInfo(rw *http.Response) error {

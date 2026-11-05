@@ -50,10 +50,10 @@ func logSubtitleFilterState() {
 		clients = append(clients, client)
 	}
 	if len(clients) == 0 {
-		logging.Info("隐藏内嵌字幕流已启用：对所有客户端生效")
+		logging.Info("隐藏内嵌字幕流已启用：对所有客户端生效（PlaybackInfo 隐藏 + 字幕请求拦截）")
 		return
 	}
-	logging.Infof("隐藏内嵌字幕流已启用：仅对客户端 %s 生效（User-Agent 包含匹配，不区分大小写）",
+	logging.Infof("隐藏内嵌字幕流已启用：仅对客户端 %s 生效（PlaybackInfo 隐藏 + 字幕请求拦截，User-Agent 包含匹配，不区分大小写）",
 		strings.Join(clients, ", "))
 }
 
