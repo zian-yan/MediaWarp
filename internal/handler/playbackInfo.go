@@ -10,6 +10,21 @@ import (
 	"github.com/AkimioJR/MediaWarp/utils"
 )
 
+func removeSubtitleStreams(jsonChain *utils.JsonChain, bsePath string, drop []bool) int {
+	removed := 0
+	for i := len(drop) - 1; i >= 0; i-- {
+		if !drop[i] {
+			continue
+		}
+		jsonChain.Delete(fmt.Sprintf("%sMediaStreams.%d", bsePath, i))
+		removed++
+	}
+	if removed > 0 {
+		jsonChain.Delete(bsePath + "DefaultSubtitleStreamIndex")
+	}
+	return removed
+}
+
 func processHTTPStrmPlaybackInfo(jsonChain *utils.JsonChain, bsePath string, itemId string, id string, directStreamURL *string) {
 	startTime := time.Now()
 	defer func() {

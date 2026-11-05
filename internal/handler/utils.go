@@ -51,6 +51,39 @@ func responseModifyCreater(rewrite func(*httputil.ProxyRequest), modifyResponseF
 	}
 }
 
+func shouldHideEmbeddedSubtitles(rw *http.Response) (bool, string) {
+	if !config.HTTPStrm.HideEmbeddedSubtitles {
+		return false, ""
+	}
+	var userAgent string
+	if rw != nil && rw.Request != nil {
+		userAgent = rw.Request.UserAgent()
+	}
+	clients := config.HTTPStrm.HideEmbeddedSubtitlesClients
+	if len(clients) == 0 {
+		return true, userAgent
+	}
+	matched := matchUserAgent(userAgent, clients)
+	if !matched {
+		logging.Debug("客户端不在隐藏内嵌字幕名单中，User-Agent: ", userAgent)
+	}
+	return matched, userAgent
+}
+
+func matchUserAgent(userAgent string, keywords []string) bool {
+	lowerUserAgent := strings.ToLower(userAgent)
+	for _, keyword := range keywords {
+		keyword = strings.ToLower(strings.TrimSpace(keyword))
+		if keyword == "" {
+			continue
+		}
+		if strings.Contains(lowerUserAgent, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
 func matchHTTPStrmPath(strmFilePath string) bool {
 	if !config.HTTPStrm.Enable {
 		logging.Debugf("HTTPStrm 未启用，%s 不进行重定向处理", strmFilePath)

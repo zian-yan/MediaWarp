@@ -45,11 +45,13 @@ type ClientFilterSetting struct {
 }
 
 type HTTPStrmSetting struct {
-	Enable            bool     `yaml:"enable"`
-	Proxy             bool     `yaml:"proxy"`
-	FinalURL          bool     `yaml:"final_url"`
-	CompatibilityMode bool     `yaml:"compatibility_mode"`
-	PrefixList        []string `yaml:"prefix_list"`
+	Enable                       bool     `yaml:"enable"`
+	Proxy                        bool     `yaml:"proxy"`
+	FinalURL                     bool     `yaml:"final_url"`
+	CompatibilityMode            bool     `yaml:"compatibility_mode"`
+	HideEmbeddedSubtitles        bool     `yaml:"hide_embedded_subtitles"`
+	HideEmbeddedSubtitlesClients []string `yaml:"hide_embedded_subtitles_clients"`
+	PrefixList                   []string `yaml:"prefix_list"`
 }
 
 type Setting struct {

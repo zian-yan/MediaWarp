@@ -50,7 +50,7 @@ MEDIAWARP
 | `log` | `access.console/file`、`service.console/file` | 两套日志各自是否输出到终端 / 文件 |
 | `cache` | `enable`、`http_strm_ttl`、`image_ttl`、`subtitle_ttl` | 缓存总开关与各项 TTL（时长格式 `1m` / `2h`，≤ 0 关闭） |
 | `client` | `enable`、`mode`、`list` | 客户端过滤开关、黑白名单模式与 UA 关键字 |
-| `http_strm` | `enable`、`proxy`、`final_url`、`compatibility_mode`、`prefix_list` | 302 重定向相关开关与 Strm 路径前缀 |
+| `http_strm` | `enable`、`proxy`、`final_url`、`compatibility_mode`、`hide_embedded_subtitles`、`hide_embedded_subtitles_clients`、`prefix_list` | 302 重定向相关开关与 Strm 路径前缀 |
 
 > 旧配置文件里残留的 `web:` 段会被 yaml 静默忽略，不影响启动，但已无任何作用。
 

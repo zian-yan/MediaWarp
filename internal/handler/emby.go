@@ -150,6 +150,19 @@ func (handler *EmbyHandler) ModifyPlaybackInfo(rw *http.Response) error {
 			continue
 		}
 
+		if hide, userAgent := shouldHideEmbeddedSubtitles(rw); hide {
+			drop := make([]bool, len(mediasource.MediaStreams))
+			for i, stream := range mediasource.MediaStreams {
+				drop[i] = stream.Type != nil && *stream.Type == emby.Subtitle &&
+					(stream.IsExternal == nil || !*stream.IsExternal) &&
+					(stream.DeliveryMethod == nil || *stream.DeliveryMethod != emby.External)
+			}
+			if removed := removeSubtitleStreams(jsonChain, bsePath, drop); removed > 0 {
+				logging.Infof("媒体 %s 隐藏 %d 条内嵌字幕流（客户端: %s），避免服务端提取字幕时下载完整文件",
+					*mediasource.ID, removed, userAgent)
+			}
+		}
+
 		processHTTPStrmPlaybackInfo(
 			jsonChain,
 			bsePath,
