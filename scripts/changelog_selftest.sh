@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-#
-# changelog.sh 的区间界定自测：在临时仓库里造 tag 与提交历史，断言输出只含本版本内容
-#
-# 用法: bash scripts/changelog_selftest.sh
 set -euo pipefail
 
 SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/changelog.sh"
@@ -31,9 +27,6 @@ assert_not_contains() {
 	esac
 }
 
-# ---------- 构造历史 ----------
-# main:  初始功能(v1.0.0) -> 新增A -> 修复B -> 更新说明(v1.1.0) -> 新增C(v1.2.0)
-# side:  从 v1.0.0 拉出 -> 旁支功能(v9.9.9)   ← 版本号更大但与发布线无关
 REPO="${WORK}/repo"
 mkdir -p "${REPO}"
 cd "${REPO}"
@@ -64,7 +57,6 @@ git checkout -q main
 commit "feat: 新增 C"
 git tag v1.2.0
 
-# ---------- 用例 1：常规区间 ----------
 out="$(bash "${SCRIPT}" v1.1.0 2>/dev/null)"
 assert_contains "${out}" "新增 A" "v1.1.0 应包含上版本之后的 feat"
 assert_contains "${out}" "修复 B" "v1.1.0 应包含上版本之后的 fix"
@@ -74,7 +66,6 @@ assert_not_contains "${out}" "旁支功能" "v1.1.0 不应包含旁支提交"
 assert_contains "${out}" "compare/v1.0.0...v1.1.0" "v1.1.0 的对比链接应指向 v1.0.0"
 pass "常规区间：只统计 v1.0.0..v1.1.0"
 
-# ---------- 用例 2：版本号更大的旁支 tag 不得被当作基线 ----------
 out="$(bash "${SCRIPT}" v1.2.0 2>/dev/null)"
 assert_contains "${out}" "新增 C" "v1.2.0 应包含自身提交"
 assert_not_contains "${out}" "新增 A" "v1.2.0 不应包含 v1.1.0 已发布的提交"
@@ -82,21 +73,18 @@ assert_not_contains "${out}" "修复 B" "v1.2.0 不应包含 v1.1.0 已发布的
 assert_contains "${out}" "compare/v1.1.0...v1.2.0" "v1.2.0 的基线应为最近的祖先 tag v1.1.0"
 pass "旁支干扰：基线取最近的祖先 tag，而不是版本号最大的 tag"
 
-# ---------- 用例 3：首个版本不列全量历史 ----------
 out="$(bash "${SCRIPT}" v1.0.0 2>/dev/null)"
 assert_contains "${out}" "首个版本" "首个版本应有明确说明"
 assert_not_contains "${out}" "初始功能" "首个版本不应把全量历史当成本版变更"
 assert_contains "${out}" "commits/v1.0.0" "首个版本的链接应指向提交列表"
 pass "首个版本：不回退成全量历史"
 
-# ---------- 用例 4：显式基线覆盖自动推导 ----------
 out="$(CHANGELOG_BASE=v1.0.0 bash "${SCRIPT}" v1.2.0 2>/dev/null)"
 assert_contains "${out}" "新增 A" "显式基线应把区间起点前推到 v1.0.0"
 assert_contains "${out}" "新增 C" "显式基线不应丢掉本版本提交"
 assert_contains "${out}" "compare/v1.0.0...v1.2.0" "显式基线应体现在对比链接里"
 pass "显式基线：CHANGELOG_BASE 覆盖自动推导"
 
-# ---------- 用例 5：复现修复前的错误行为 ----------
 old_base="$(git tag -l 'v*' --sort=-v:refname | grep -v '^v1.2.0$' | head -n1)"
 old_commits="$(git log --no-merges --pretty=format:'%s' "${old_base}..v1.2.0")"
 printf '修复前逻辑选出的基线：%s\n' "${old_base}"

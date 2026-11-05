@@ -22,13 +22,8 @@ RUN go mod download && \
 
 FROM alpine:3.21
 
-# ca-certificates：解析 HTTPS 直链（final_url）时校验系统根证书
-# tzdata：容器内时区与日志时间（配合 TZ / /etc/localtime）
 RUN apk add --no-cache ca-certificates tzdata
 
-# 内存软上限：必须高于缓存池总量（图片 64 + 字幕 32 + Strm 16 = 112MiB），
-# 否则运行时会长期贴着上限跑，陷入高频 GC。压到这个值附近时 Go 会主动 GC 并归还内存。
-# 容器内存紧张时可用 -e GOMEMLIMIT=... 覆盖。
 ENV GOMEMLIMIT=192MiB
 
 COPY --chmod=755 --from=builder /builder/MediaWarp /MediaWarp
