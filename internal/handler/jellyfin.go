@@ -137,6 +137,8 @@ func (handler *JellyfinHandler) ModifyPlaybackInfo(rw *http.Response) error {
 			if removed := removeSubtitleStreams(jsonChain, bsePath, drop); removed > 0 {
 				logging.Infof("媒体 %s 隐藏 %d 条内嵌字幕流（客户端: %s），避免服务端提取字幕时下载完整文件",
 					*mediasource.ID, removed, userAgent)
+			} else {
+				logging.Debugf("媒体 %s 未发现可隐藏的内嵌字幕流（客户端: %s）", *mediasource.ID, userAgent)
 			}
 		}
 		processHTTPStrmPlaybackInfo(
