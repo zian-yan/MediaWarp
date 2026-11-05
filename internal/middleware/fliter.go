@@ -25,7 +25,7 @@ func ClientFilter() gin.HandlerFunc {
 		userAgent := ctx.Request.UserAgent()
 		var allowed bool
 		if userAgent == "" {
-			allowed = false
+			allowed = mode == constants.BLACKLIST
 		} else {
 			switch mode {
 			case constants.WHITELIST:
@@ -48,7 +48,8 @@ func ClientFilter() gin.HandlerFunc {
 		}
 		if !allowed {
 			ctx.AbortWithStatus(http.StatusForbidden)
-			logging.Info("客户端过滤器拦截了请求，User-Agent: ", userAgent)
+			logging.Infof("客户端过滤器拦截了请求，User-Agent: %q, %s %s, 来源: %s",
+				userAgent, ctx.Request.Method, ctx.Request.URL.Path, ctx.ClientIP())
 			return
 		}
 		logging.Debug("客户端过滤器放行了请求，User-Agent: ", userAgent)
