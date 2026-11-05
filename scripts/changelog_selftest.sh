@@ -91,4 +91,12 @@ printf '修复前逻辑选出的基线：%s\n' "${old_base}"
 assert_contains "${old_commits}" "新增 A" "旧逻辑应复现「基线取版本号最大 tag」导致的历史混入"
 pass "已复现修复前缺陷（基线 = ${old_base}，混入已发布提交）"
 
+out="$(AUTHOR_MAP="tester=test-user" bash "${SCRIPT}" v1.1.0 2>/dev/null)"
+assert_contains "${out}" "by @test-user" "AUTHOR_MAP 命中时应使用映射后的 GitHub 账号"
+assert_not_contains "${out}" "by @tester" "映射生效后不应再输出未映射的作者名提及"
+
+out="$(bash "${SCRIPT}" v1.1.0 2>/dev/null)"
+assert_contains "${out}" "by tester" "未映射且非 noreply 邮箱时应只写作者名"
+assert_not_contains "${out}" "by @" "未解析出 GitHub 账号时不应输出 @ 提及"
+
 printf '\n全部用例通过\n'

@@ -5,6 +5,35 @@ VERSION_TAG_GLOB='v[0-9]*.[0-9]*.[0-9]*'
 
 log() { printf '%s\n' "$*" >&2; }
 
+resolve_github_login() {
+	local name="$1" email="$2" pair pairs login
+
+	if [ -n "${AUTHOR_MAP:-}" ]; then
+		IFS=',' read -ra pairs <<<"${AUTHOR_MAP}"
+		for pair in "${pairs[@]}"; do
+			[ -z "${pair}" ] && continue
+			login="${pair#*=}"
+			if [ "${pair%%=*}" = "${name}" ] || [ "${pair%%=*}" = "${email}" ]; then
+				if [ -n "${login}" ] && [ "${login}" != "${pair}" ]; then
+					printf '%s' "${login}"
+					return 0
+				fi
+			fi
+		done
+	fi
+
+	if [[ "${email}" =~ ^[0-9]+\+([A-Za-z0-9-]+)@users\.noreply\.github\.com$ ]]; then
+		printf '%s' "${BASH_REMATCH[1]}"
+		return 0
+	fi
+	if [[ "${email}" =~ ^([A-Za-z0-9-]+)@users\.noreply\.github\.com$ ]]; then
+		printf '%s' "${BASH_REMATCH[1]}"
+		return 0
+	fi
+
+	return 1
+}
+
 TAG="${1:-${GITHUB_REF_NAME:-}}"
 if [ -z "${TAG}" ]; then
 	log "缺少 tag 参数"
@@ -59,7 +88,7 @@ fi
 
 if [ -n "${BASE}" ]; then
 	log "changelog 区间: ${BASE}..${TAG}"
-	COMMITS=$(git log --no-merges --pretty=format:"%s%x1f%an" "${BASE}..${TAG}")
+	COMMITS=$(git log --no-merges --pretty=format:"%s%x1f%an%x1f%ae" "${BASE}..${TAG}")
 else
 	log "changelog 区间: 未找到更早的版本 tag，按首个版本处理"
 	COMMITS=""
@@ -70,7 +99,7 @@ FEATURES=""
 FIXES=""
 OTHERS=""
 
-while IFS=$'\x1f' read -r msg author; do
+while IFS=$'\x1f' read -r msg author email; do
 	if [ -z "${msg:-}" ]; then
 		continue
 	fi
@@ -101,8 +130,8 @@ while IFS=$'\x1f' read -r msg author; do
 	fi
 	SEEN[${dedup_key}]=1
 
-	if [[ "${author}" =~ ^[A-Za-z0-9-]+$ ]]; then
-		entry="- ${desc} by @${author}"
+	if login="$(resolve_github_login "${author}" "${email}")"; then
+		entry="- ${desc} by @${login}"
 	else
 		entry="- ${desc} by ${author}"
 	fi
