@@ -227,3 +227,9 @@
   - 字幕请求拦截复用 `hide_embedded_subtitles_clients` 的 User-Agent 名单，未命中名单的客户端不产生额外查询
   - `config.yaml.example` 补充客户端 UA 填写说明：网页播放填 `Mozilla` 即覆盖 Chrome / Safari / Edge，并提示不要只写 `Safari`（Chrome 的 UA 也含 Safari/537.36）
   - 补充单元测试：字幕路径解析、UA 匹配、内嵌拦截 / 外挂放行 / 名单外放行三条路由用例
+- 2026.11.6: v1.2.2
+  - `http_strm.final_url` 重定向解析默认放行环回地址（`127.0.0.0/8`、`::1`），不再拦截媒体服务器与本机服务（本机 Alist / OpenList 等）之间的直连场景
+  - 新增 `http_strm.allow_loopback`（默认 `true`）：设为 `false` 时恢复对环回地址的拦截，用于收紧密集部署的 SSRF 面
+  - 链路本地地址（`169.254.0.0/16`）、组播与未指定地址仍始终拒绝，不受该开关影响；`allow_loopback` 关闭时启动日志给出提示
+  - 补充单元测试：环回默认放行 / 显式关闭 / 局域网地址不受影响 / 链路本地与未指定地址始终拒绝共 12 例
+  - 修复发布说明中的 @ 提及：按 GitHub 账号映射提交邮箱，避免提及到无关用户
