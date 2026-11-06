@@ -35,7 +35,9 @@ http_strm:                                  # HTTPStrm 相关配置（Strm 文�
   enable: true                              # 是否开启 HTTPStrm 重定向
   proxy: false                              # 是否允许流量经过媒体服务器（true: 允许串流、转码行为；false: 仅支持直接播放）
   final_url: true                           # 对 URL 进行重定向判断，找到非重定向地址再重定向给客户端，减少客户端重定向次数（适用于 Strm 内容是局域网地址但是想要在公网之中播放）
-                                            # 出于 SSRF 防护，环回地址（127.0.0.0/8、::1）与链路本地地址（169.254.0.0/16）会被拒绝，局域网私网地址（192.168.x.x 等）允许
+                                            # 出于 SSRF 防护，链路本地地址（169.254.0.0/16）、组播与未指定地址会被拒绝，局域网私网地址（192.168.x.x 等）允许
+  allow_loopback: true                      # 是否允许 Strm 目标为环回地址（127.0.0.0/8、::1），默认 true
+                                            # 设为 false 时会拒绝环回地址：此时媒体服务器与本机服务（例如本机 Alist/OpenList）之间无法直连重定向
   compatibility_mode: false                 # 兼容模式，开启后将使用更兼容但效率较低的方式获取最终 URL
   hide_embedded_subtitles: false            # 对命中前缀的 Strm 条目隐藏内嵌字幕流：PlaybackInfo 里不返回这些字幕流，且直接请求字幕流时返回 404，避免媒体服务器提取字幕时把远程文件整片下载；外挂字幕（同目录 .srt/.ass/.sup）不受影响
   hide_embedded_subtitles_clients: []       # 可选：只对匹配的客户端生效（按 User-Agent 包含关系匹配，忽略大小写），留空表示对所有客户端生效

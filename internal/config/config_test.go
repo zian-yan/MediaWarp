@@ -150,3 +150,22 @@ func TestLoadConfigCacheDisabled(t *testing.T) {
 func replaceOnce(s, old, new string) string {
 	return strings.Replace(s, old, new, 1)
 }
+
+func TestHTTPStrmAllowLoopback(t *testing.T) {
+	resetConfig(t)
+
+	if err := loadFromString(t, validConfig); err != nil {
+		t.Fatalf("合法配置应加载成功，实际报错: %v", err)
+	}
+	if !HTTPStrm.IsAllowLoopback() {
+		t.Error("未配置 allow_loopback 时应默认允许环回地址")
+	}
+
+	content := replaceOnce(validConfig, "  final_url: true", "  final_url: true\n  allow_loopback: false")
+	if err := loadFromString(t, content); err != nil {
+		t.Fatalf("allow_loopback: false 属于合法配置，实际报错: %v", err)
+	}
+	if HTTPStrm.IsAllowLoopback() {
+		t.Error("allow_loopback: false 时应拒绝环回地址")
+	}
+}

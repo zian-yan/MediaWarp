@@ -143,8 +143,16 @@ func validateRedirectTarget(u *url.URL) error {
 	if err != nil {
 		return fmt.Errorf("解析主机名 %s 失败: %w", host, err)
 	}
+	allowLoopback := config.HTTPStrm.IsAllowLoopback()
 	for _, ip := range ips {
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		if ip.IsLoopback() {
+			if !allowLoopback {
+				return fmt.Errorf("目标地址 %s（%s）属于环回网段，已被 http_strm.allow_loopback 拦截", host, ip)
+			}
+			logging.Debugf("目标地址 %s（%s）属于环回网段，按默认/配置允许", host, ip)
+			continue
+		}
+		if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
 			return fmt.Errorf("目标地址 %s（%s）属于受限网段，已拦截", host, ip)
 		}
 	}
