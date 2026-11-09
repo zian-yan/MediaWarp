@@ -99,4 +99,11 @@ out="$(bash "${SCRIPT}" v1.1.0 2>/dev/null)"
 assert_contains "${out}" "by tester" "未映射且非 noreply 邮箱时应只写作者名"
 assert_not_contains "${out}" "by @" "未解析出 GitHub 账号时不应输出 @ 提及"
 
+out="$(AUTHOR_MAP="tester=bad@login" bash "${SCRIPT}" v1.1.0 2>/dev/null)"
+assert_contains "${out}" "by tester" "映射值含非法账号字符时应回退为作者名"
+assert_not_contains "${out}" "by @" "非法映射值不应生成 @ 提及"
+
+out="$(AUTHOR_MAP="=ghost,tester=test-user" bash "${SCRIPT}" v1.1.0 2>/dev/null)"
+assert_contains "${out}" "by @test-user" "空映射键应被跳过且不影响后续映射"
+
 printf '\n全部用例通过\n'

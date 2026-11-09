@@ -20,6 +20,8 @@ type Config[V any] struct {
 const (
 	minReleaseBytes = 8 << 20
 	maxReleaseBytes = 32 << 20
+
+	minReleaseInterval = 5 * time.Minute
 )
 
 type cacheItem[V any] struct {
@@ -71,13 +73,19 @@ func New[V any](cfg Config[V]) *Cache[V] {
 func (c *Cache[V]) janitor(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	var lastRelease time.Time
 	for {
 		select {
-		case <-ticker.C:
+		case now := <-ticker.C:
 			freed := c.PurgeExpired()
-			if freed > 0 && c.cfg.ReleaseOS && freed >= c.releaseThreshold() {
-				debug.FreeOSMemory()
+			if freed <= 0 || !c.cfg.ReleaseOS || freed < c.releaseThreshold() {
+				continue
 			}
+			if !lastRelease.IsZero() && now.Sub(lastRelease) < minReleaseInterval {
+				continue
+			}
+			debug.FreeOSMemory()
+			lastRelease = now
 		case <-c.stop:
 			return
 		}

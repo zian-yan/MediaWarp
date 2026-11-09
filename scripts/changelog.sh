@@ -6,15 +6,17 @@ VERSION_TAG_GLOB='v[0-9]*.[0-9]*.[0-9]*'
 log() { printf '%s\n' "$*" >&2; }
 
 resolve_github_login() {
-	local name="$1" email="$2" pair pairs login
+	local name="$1" email="$2" pair pairs login key
 
 	if [ -n "${AUTHOR_MAP:-}" ]; then
 		IFS=',' read -ra pairs <<<"${AUTHOR_MAP}"
 		for pair in "${pairs[@]}"; do
 			[ -z "${pair}" ] && continue
+			key="${pair%%=*}"
 			login="${pair#*=}"
-			if [ "${pair%%=*}" = "${name}" ] || [ "${pair%%=*}" = "${email}" ]; then
-				if [ -n "${login}" ] && [ "${login}" != "${pair}" ]; then
+			[ -z "${key}" ] && continue
+			if [ "${key}" = "${name}" ] || { [ -n "${email}" ] && [ "${key}" = "${email}" ]; }; then
+				if [ -n "${login}" ] && [ "${login}" != "${pair}" ] && [[ "${login}" =~ ^[A-Za-z0-9-]+$ ]]; then
 					printf '%s' "${login}"
 					return 0
 				fi

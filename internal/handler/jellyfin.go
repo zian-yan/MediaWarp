@@ -264,7 +264,7 @@ func (handler *JellyfinHandler) VideosHandler(ctx *gin.Context) {
 			break
 		}
 		if mediasource.Protocol != nil && *mediasource.Protocol == jellyfin.HTTP {
-			target := handler.httpStrmHandler(*mediasource.Path, ctx.Request.UserAgent())
+			target := handler.httpStrmHandler(ctx.Request.Context(), *mediasource.Path, ctx.Request.UserAgent())
 			if !utils.IsSafeRedirectURL(target) {
 				logging.Warningf("HTTPStrm 重定向目标协议不合法，转回上游：%s", utils.MaskSensitiveURL(target))
 				handler.proxy.ServeHTTP(ctx.Writer, ctx.Request)

@@ -56,9 +56,10 @@ type HTTPStrmSetting struct {
 }
 
 // IsAllowLoopback 返回是否允许重定向目标指向环回地址（127.0.0.0/8、::1）。
-// 未显式配置 allow_loopback 时默认允许；链路本地、组播、未指定地址不受该项影响，始终拒绝。
+// 未显式配置 allow_loopback 时默认拒绝，需要本机直连（例如同机 Alist/OpenList）的用户
+// 必须显式配置 allow_loopback: true 才会放行。链路本地、组播、未指定地址不受该项影响，始终拒绝。
 func (s HTTPStrmSetting) IsAllowLoopback() bool {
-	return s.AllowLoopback == nil || *s.AllowLoopback
+	return s.AllowLoopback != nil && *s.AllowLoopback
 }
 
 type Setting struct {

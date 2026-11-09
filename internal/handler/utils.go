@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/AkimioJR/MediaWarp/internal/config"
@@ -124,6 +126,11 @@ func matchHTTPStrmPath(strmFilePath string) bool {
 const (
 	MaxRedirectAttempts = 10
 	RedirectTimeout     = 10 * time.Second
+
+	RedirectTotalTimeout = 30 * time.Second
+	DialTimeout          = 5 * time.Second
+
+	loopbackAllowLogInterval = 1000
 )
 
 var (
@@ -131,7 +138,32 @@ var (
 	ErrMaxRedirectsExceeded  = fmt.Errorf("超过最大重定向次数限制（%d）", MaxRedirectAttempts)
 )
 
-func validateRedirectTarget(u *url.URL) error {
+var loopbackAllowCount atomic.Int64
+
+func logLoopbackAllowed(host string) {
+	count := loopbackAllowCount.Add(1)
+	if count == 1 || count%loopbackAllowLogInterval == 0 {
+		logging.Infof("目标地址 %s 属于环回网段，已按 http_strm.allow_loopback 放行（累计 %d 次）", host, count)
+	}
+}
+
+func checkTargetIP(ip net.IP, allowLoopback bool) error {
+	if ip == nil {
+		return errors.New("目标地址为空")
+	}
+	if ip.IsLoopback() {
+		if !allowLoopback {
+			return fmt.Errorf("目标地址 %s 属于环回网段，已被 http_strm.allow_loopback 拦截", ip)
+		}
+		return nil
+	}
+	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return fmt.Errorf("目标地址 %s 属于受限网段，已拦截", ip)
+	}
+	return nil
+}
+
+func validateRedirectTargetWith(u *url.URL, allowLoopback bool) error {
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("不允许的协议: %s", u.Scheme)
 	}
@@ -143,27 +175,74 @@ func validateRedirectTarget(u *url.URL) error {
 	if err != nil {
 		return fmt.Errorf("解析主机名 %s 失败: %w", host, err)
 	}
-	allowLoopback := config.HTTPStrm.IsAllowLoopback()
+	var (
+		allowed    int
+		allowLoop  bool
+		blockedErr error
+	)
 	for _, ip := range ips {
-		if ip.IsLoopback() {
-			if !allowLoopback {
-				return fmt.Errorf("目标地址 %s（%s）属于环回网段，已被 http_strm.allow_loopback 拦截", host, ip)
+		if err := checkTargetIP(ip, allowLoopback); err != nil {
+			if blockedErr == nil {
+				blockedErr = err
 			}
-			logging.Debugf("目标地址 %s（%s）属于环回网段，按默认/配置允许", host, ip)
 			continue
 		}
-		if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
-			return fmt.Errorf("目标地址 %s（%s）属于受限网段，已拦截", host, ip)
+		if ip.IsLoopback() {
+			allowLoop = true
 		}
+		allowed++
+	}
+	if allowed == 0 {
+		if blockedErr != nil {
+			return fmt.Errorf("主机 %s 无可用目标地址: %w", host, blockedErr)
+		}
+		return fmt.Errorf("主机 %s 无可用目标地址", host)
+	}
+	if allowLoop {
+		logLoopbackAllowed(host)
 	}
 	return nil
 }
 
-func getFinalURL(client *http.Client, rawURL string, ua string) (string, error) {
+func newSafeDialContext() func(ctx context.Context, network, addr string) (net.Conn, error) {
+	dialer := &net.Dialer{Timeout: DialTimeout, KeepAlive: 30 * time.Second}
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, fmt.Errorf("解析拨号地址 %s 失败: %w", addr, err)
+		}
+		allowLoopback := config.HTTPStrm.IsAllowLoopback()
+		addrs, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		if err != nil {
+			return nil, fmt.Errorf("解析主机名 %s 失败: %w", host, err)
+		}
+		var lastErr error
+		for _, ipAddr := range addrs {
+			if err := checkTargetIP(ipAddr.IP, allowLoopback); err != nil {
+				lastErr = err
+				continue
+			}
+			conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(ipAddr.IP.String(), port))
+			if dialErr == nil {
+				return conn, nil
+			}
+			lastErr = dialErr
+		}
+		if lastErr == nil {
+			return nil, fmt.Errorf("主机 %s 无可用目标地址", host)
+		}
+		return nil, fmt.Errorf("连接 %s 失败: %w", host, lastErr)
+	}
+}
+
+func getFinalURL(ctx context.Context, client *http.Client, rawURL string, ua string) (string, error) {
 	startTime := time.Now()
 	defer func() {
 		logging.Debugf("获取 %s 最终URL耗时：%s", rawURL, time.Since(startTime))
 	}()
+
+	ctx, cancel := context.WithTimeout(ctx, RedirectTotalTimeout)
+	defer cancel()
 
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
@@ -172,7 +251,8 @@ func getFinalURL(client *http.Client, rawURL string, ua string) (string, error) 
 	if parsedURL.Scheme == "" {
 		return "", fmt.Errorf("URL 缺少协议头： %s", parsedURL)
 	}
-	if err := validateRedirectTarget(parsedURL); err != nil {
+	allowLoopback := config.HTTPStrm.IsAllowLoopback()
+	if err := validateRedirectTargetWith(parsedURL, allowLoopback); err != nil {
 		return "", fmt.Errorf("初始 URL 未通过安全校验: %w", err)
 	}
 
@@ -194,7 +274,7 @@ func getFinalURL(client *http.Client, rawURL string, ua string) (string, error) 
 		visited[currentURL] = struct{}{}
 		redirectChain = append(redirectChain, currentURL)
 
-		req, err := http.NewRequest(method, currentURL, nil)
+		req, err := http.NewRequestWithContext(ctx, method, currentURL, nil)
 		if err != nil {
 			return "", fmt.Errorf("创建请求失败: %w", err)
 		}
@@ -212,7 +292,7 @@ func getFinalURL(client *http.Client, rawURL string, ua string) (string, error) 
 			if err != nil {
 				return "", ErrInvalidLocationHeader
 			}
-			if err := validateRedirectTarget(location); err != nil {
+			if err := validateRedirectTargetWith(location, allowLoopback); err != nil {
 				return "", fmt.Errorf("重定向目标未通过安全校验: %w", err)
 			}
 			currentURL = location.String()

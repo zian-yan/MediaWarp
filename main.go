@@ -115,7 +115,11 @@ func logConfigState() {
 	if config.ClientFilter.Enable {
 		logging.Infof("客户端过滤已启用，模式：%s，名单：%v", config.ClientFilter.Mode, config.ClientFilter.ClientList)
 	}
-	if config.HTTPStrm.Enable && config.HTTPStrm.FinalURL && !config.HTTPStrm.IsAllowLoopback() {
-		logging.Info("http_strm.allow_loopback 已关闭：Strm 目标为环回地址（127.0.0.0/8、::1）时将被拒绝")
+	if config.HTTPStrm.Enable && config.HTTPStrm.FinalURL {
+		if config.HTTPStrm.IsAllowLoopback() {
+			logging.Info("http_strm.allow_loopback 已开启：Strm 目标允许指向环回地址（127.0.0.0/8、::1），请确认本机没有对外暴露的敏感服务")
+		} else {
+			logging.Info("http_strm.allow_loopback 已关闭（默认）：Strm 目标为环回地址（127.0.0.0/8、::1）时将被拒绝，同机部署需显式配置 allow_loopback: true")
+		}
 	}
 }
