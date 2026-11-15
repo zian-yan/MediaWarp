@@ -1,14 +1,9 @@
 name: CI
 
 on:
-  push:
-    paths:
-      - "**/*.go"
-      - "**/go.mod"
-      - "**/go.sum"
-      - ".github/workflows/ci.yaml"
-      - "docker/**"
-      - ".dockerignore"
+  # 只在发布新版本时由 release.yaml 调用，日常推送不再自动跑
+  workflow_call:
+  workflow_dispatch:
   pull_request:
     paths:
       - "**/*.go"

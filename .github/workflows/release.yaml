@@ -24,8 +24,12 @@ jobs:
           set -euo pipefail
           echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
 
+  ci:
+    name: Run CI checks
+    uses: ./.github/workflows/ci.yaml
+
   build-binary:
-    needs: metadata
+    needs: [metadata, ci]
     uses: ./.github/workflows/build-binary.yaml
     with:
       version: ${{ github.ref_name }}
