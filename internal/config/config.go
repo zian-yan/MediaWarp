@@ -55,12 +55,20 @@ func ConfigFilePath() string {
 	return ConfigPath()
 }
 
+// LogDir 返回 MediaWarp 的日志根目录。
+//
+// 与 AutoFilm 的按天日志（logs/autofilm）并列，两个进程常常共用一个日志挂载点
+// （容器里都是 /logs），按来源分文件夹才不会混在一起。
 func LogDir() string {
-	return "logs"
+	return filepath.Join("logs", "mediawarp")
 }
 
+// LogDirWithDate 返回当天的分目录，例如 logs/mediawarp/2026-11-19。
+//
+// 日期固定用带前导零的 2006-01-02：目录名既能按字符串排序，也能被日志清理
+// 逻辑稳定解析成日期。
 func LogDirWithDate() string {
-	return filepath.Join(LogDir(), time.Now().Format("2006-1-2"))
+	return filepath.Join(LogDir(), time.Now().Format("2006-01-02"))
 }
 
 func AccessLogPath() string {

@@ -41,6 +41,10 @@ func Init() {
 	if config.Logger.ServiceLogger.File {
 		serviceLogger.AddHook(NewLoggerFileHook(true))
 	}
+
+	// 启动时先清一次过期日志：容器可能每天重启，跨天换文件那条清理路径不一定
+	// 有机会执行；只删保留期之外的日期分目录，不影响当天正在写的文件。
+	pruneExpiredLogs(config.LogDir(), KeepDays)
 }
 
 func AccessLogf(format string, args ...any) {
